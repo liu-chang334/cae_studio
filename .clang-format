@@ -1,0 +1,14 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+BreakBeforeBraces: Attach
+
+# public:、private: 等相对于成员缩进向左移动 4 列，
+# 配合 IndentWidth: 4，使它们与 class 左侧对齐。
+AccessModifierOffset: -4
+
+# 告诉格式化器：这些宏本身就是完整语句，不需要结尾分号。
+StatementMacros:
+  - Q_OBJECT
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
