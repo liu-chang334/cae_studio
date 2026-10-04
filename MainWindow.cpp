@@ -13,19 +13,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
  * @brief 初始化模型面板
  */
 void MainWindow::setupModelPanel() {
-    // 创建模型树
+    /// 创建树控件, this为父对象
     modelTree_ = new QTreeWidget(this);
-    modelTree_->setColumnCount(2);
-    QStringList headers = {"Type", "size"};
-    modelTree_->setHeaderLabels(headers);
-    modelTree_->setColumnWidth(0, 180);
-    modelTree_->setColumnWidth(1, 20);
+    modelTree_->setColumnCount(2);          // 设置列数
+    QStringList headers = {"Type", "size"}; // 表头
+    modelTree_->setHeaderLabels(headers);   // 设置表头
+    modelTree_->setColumnWidth(0, 180);     // 设置第一列宽度
+    modelTree_->setColumnWidth(1, 20);      // 设置第二列宽度
 
-    // 根节点
+    // 创建根节点
     QTreeWidgetItem *root_item = new QTreeWidgetItem(modelTree_);
     root_item->setText(0, "Model-1");
 
-    // 子节点
+    // 创建子节点
     QTreeWidgetItem *node_item = new QTreeWidgetItem(root_item);
     node_item->setText(0, "Node");
     QTreeWidgetItem *elem_item = new QTreeWidgetItem(root_item);
@@ -48,4 +48,4 @@ void MainWindow::setupModelPanel() {
 /**
  * @brief 初始化中心区域
  */
-void setupCentral() {}
+void MainWindow::setupCentral() {}
