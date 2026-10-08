@@ -1,89 +1,129 @@
+<!-- omit from toc -->
 # Qt_Notes
-## QTreeWidget ´´½¨Ä£ĞÍÊ÷
-### 1. QTreeWidget 
-`QTreeWidget` ÓÃÓÚÏÔÊ¾¾ßÓĞ¸¸×Ó²ã¼¶¹ØÏµµÄÊı¾İ
+- [1. QTreeWidget åˆ›å»ºæ¨¡å‹æ ‘](#1-qtreewidget-åˆ›å»ºæ¨¡å‹æ ‘)
+  - [1.1. QTreeWidget](#11-qtreewidget)
+  - [1.2. è®¾ç½®åˆ—æ•°](#12-è®¾ç½®åˆ—æ•°)
+  - [1.3. è®¾ç½®è¡¨å¤´](#13-è®¾ç½®è¡¨å¤´)
+  - [1.4. è®¾ç½®åˆ—å®½](#14-è®¾ç½®åˆ—å®½)
+  - [1.5. åˆ›å»ºæ ¹èŠ‚ç‚¹](#15-åˆ›å»ºæ ¹èŠ‚ç‚¹)
+  - [1.6. åˆ›å»ºå­èŠ‚ç‚¹](#16-åˆ›å»ºå­èŠ‚ç‚¹)
+  - [1.7. å±•å¼€èŠ‚ç‚¹](#17-å±•å¼€èŠ‚ç‚¹)
+  - [1.8. Qt å¯¹è±¡æ‰€æœ‰æƒ](#18-qt-å¯¹è±¡æ‰€æœ‰æƒ)
+
+## 1. QTreeWidget åˆ›å»ºæ¨¡å‹æ ‘
+### 1.1. QTreeWidget 
+
+`QTreeWidget` ç”¨äºæ˜¾ç¤ºå…·æœ‰çˆ¶å­å±‚çº§å…³ç³»çš„æ•°æ®
+
 ```cpp
 modelTree_ = new QTreeWidget(this);
 ```
-`this`ÊÇÊ÷¿Ø¼şµÄ¸¸¶ÔÏó, ¸¸¶ÔÏó±»Ïú»ÙÊ±, Qt×Ô¶¯Ïú»Ù¸ÃÊ÷¿Ø¼ş
 
-### 2. ÉèÖÃÁĞÊı
-Ê¹ÓÃ`setColumnCount(int)`ÉèÖÃÊ÷¿Ø¼şµÄÁĞÊı:
+`this`æ˜¯æ ‘æ§ä»¶çš„çˆ¶å¯¹è±¡, çˆ¶å¯¹è±¡è¢«é”€æ¯æ—¶, Qtè‡ªåŠ¨é”€æ¯è¯¥æ ‘æ§ä»¶
+
+### 1.2. è®¾ç½®åˆ—æ•°
+
+ä½¿ç”¨`setColumnCount(int)`è®¾ç½®æ ‘æ§ä»¶çš„åˆ—æ•°:
 [column] /?k?l?m/
+
 ```cpp
 modelTree_->setColumnCount(2);
 ```
-Ë÷Òı´Ó0¿ªÊ¼
 
-### 3. ÉèÖÃ±íÍ·
-Ê¹ÓÃ`setHeaderLabels(QStringList)`ÉèÖÃµ¥ÁĞ±íÍ·:
+ç´¢å¼•ä»0å¼€å§‹
+
+### 1.3. è®¾ç½®è¡¨å¤´
+
+ä½¿ç”¨`setHeaderLabels(QStringList)`è®¾ç½®å•åˆ—è¡¨å¤´:
+
 ```cpp
 modelTree_->setHeaderLabels({"Type", "size"});
 ```
 
-### 4. ÉèÖÃÁĞ¿í
-Ê¹ÓÃ`setColumnWidth(int column, int width)`ÉèÖÃÖ¸¶¨ÁĞµÄ¿í¶È:
+### 1.4. è®¾ç½®åˆ—å®½
+
+ä½¿ç”¨`setColumnWidth(int column, int width)`è®¾ç½®æŒ‡å®šåˆ—çš„å®½åº¦:
+
 ```cpp
-///@param column ÁĞË÷Òı
-///@param width ÁĞ¿í¶È
+///@param column åˆ—ç´¢å¼•
+///@param width åˆ—å®½åº¦
 modelTree_->setColumnWidth(0, 180);
 modelTree_->setColumnWidth(1,60);
 ```
 
-### 5. ´´½¨¸ù½Úµã
-ÒÔ`QTreeWidget`Îª¸¸¶ÔÏó, ´´½¨¸ù½Úµã:
+### 1.5. åˆ›å»ºæ ¹èŠ‚ç‚¹
+
+ä»¥`QTreeWidget`ä¸ºçˆ¶å¯¹è±¡, åˆ›å»ºæ ¹èŠ‚ç‚¹:
+
 ```cpp
 auto* root_item = new QTreeWidgetItem(modelTree_);
 root_item->setText(0, "Model-1");
 ```
-`setText(int column, QString text)`ÉèÖÃÖ¸¶¨ÁĞµÄÎÄ±¾:
+
+`setText(int column, QString text)`è®¾ç½®æŒ‡å®šåˆ—çš„æ–‡æœ¬:
+
 ```cpp
-///@param column ÁĞË÷Òı
-///@param text ÁĞÎÄ±¾
+///@param column åˆ—ç´¢å¼•
+///@param text åˆ—æ–‡æœ¬
 root_item->setText(0, "Model-1");
 root_item->setText(1, "1");
 ```
+
 | Type    | Size |
 |---------|------|
 | Model-1 |   1  |
 
-### 6. ´´½¨×Ó½Úµã
-½«ÁíÒ»¸ö`QTreeWidgetItem`×÷Îª¸¸¶ÔÏó:
+### 1.6. åˆ›å»ºå­èŠ‚ç‚¹
+
+å°†å¦ä¸€ä¸ª`QTreeWidgetItem`ä½œä¸ºçˆ¶å¯¹è±¡:
+
 ```cpp
 auto* node_item =  new QTreeWidgetItem(root_item);
 node_item->setText(0, "Node");  
 node_item->setText(1, "100");
 ```
+
 | Type | Size |
 |------|------|
 | Node | 100  |
 
-### 7. Õ¹¿ª½Úµã
-Õ¹¿ªÊ÷ÖĞµÄÈ«²¿½Úµã£º
+### 1.7. å±•å¼€èŠ‚ç‚¹
+
+å±•å¼€æ ‘ä¸­çš„å…¨éƒ¨èŠ‚ç‚¹ï¼š
+
 ```cpp
 modelTree_->expandAll();
 ```
-Ö»Õ¹¿ªÖ¸¶¨½Úµã£º
+
+åªå±•å¼€æŒ‡å®šèŠ‚ç‚¹ï¼š
+
 ```cpp
 rootItem->setExpanded(true);
 ```
-ÕÛµşÖ¸¶¨½Úµã£º
+
+æŠ˜å æŒ‡å®šèŠ‚ç‚¹ï¼š
+
 ```cpp
 rootItem->setExpanded(false);
 ```
 
-### 10. Qt ¶ÔÏóËùÓĞÈ¨
-Qt Ê¹ÓÃ¸¸×Ó¶ÔÏó»úÖÆ¹ÜÀíÄÚ´æ:
+### 1.8. Qt å¯¹è±¡æ‰€æœ‰æƒ
+
+Qt ä½¿ç”¨çˆ¶å­å¯¹è±¡æœºåˆ¶ç®¡ç†å†…å­˜:
+
 ```cpp
 modelTree_ = new QTreeWidget(this);
 auto* rootItem = new QTreeWidgetItem(modelTree_);
 auto* childItem = new QTreeWidgetItem(rootItem);
 ```
-¶ÔÏóÖ®¼äµÄ¹ØÏµÎª£º
+
+å¯¹è±¡ä¹‹é—´çš„å…³ç³»ä¸ºï¼š
+
 ```text
 MainWindow
-©¸©¤©¤ modelTree_
-    ©¸©¤©¤ rootItem
-        ©¸©¤©¤ childItem
+â””â”€â”€ modelTree_
+    â””â”€â”€ rootItem
+        â””â”€â”€ childItem
 ```
-¸¸¶ÔÏóÏú»ÙÊ±£¬Æä×Ó¶ÔÏóÒ²»á±»×Ô¶¯Ïú»Ù
+
+çˆ¶å¯¹è±¡é”€æ¯æ—¶ï¼Œå…¶å­å¯¹è±¡ä¹Ÿä¼šè¢«è‡ªåŠ¨é”€æ¯
