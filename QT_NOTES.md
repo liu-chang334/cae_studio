@@ -1,17 +1,19 @@
 <!-- omit from toc -->
 # Qt_Notes
-- [1. QTreeWidget 创建模型树](#1-qtreewidget-创建模型树)
-  - [1.1. QTreeWidget](#11-qtreewidget)
-  - [1.2. 设置列数](#12-设置列数)
-  - [1.3. 设置表头](#13-设置表头)
-  - [1.4. 设置列宽](#14-设置列宽)
-  - [1.5. 创建根节点](#15-创建根节点)
-  - [1.6. 创建子节点](#16-创建子节点)
-  - [1.7. 展开节点](#17-展开节点)
-  - [1.8. Qt 对象所有权](#18-qt-对象所有权)
+- [1. QPlainTextEdit](#1-qplaintextedit)
+- [2. QSplitter](#2-qsplitter)
+- [3. QTableWidgetItem](#3-qtablewidgetitem)
+- [4. QTreeWidget](#4-qtreewidget)
+- [5. QVTKOpenGLNativeWidget](#5-qvtkopenglnativewidget)
 
-## 1. QTreeWidget 创建模型树
-### 1.1. QTreeWidget 
+## 1. QPlainTextEdit
+
+## 2. QSplitter
+
+## 3. QTableWidgetItem
+
+## 4. QTreeWidget
+### 4.1. 创建 
 
 `QTreeWidget` 用于显示具有父子层级关系的数据
 
@@ -21,10 +23,9 @@ modelTree_ = new QTreeWidget(this);
 
 `this`是树控件的父对象, 父对象被销毁时, Qt自动销毁该树控件
 
-### 1.2. 设置列数
+### 4.2. 设置列数
 
 使用`setColumnCount(int)`设置树控件的列数:
-[column] /?k?l?m/
 
 ```cpp
 modelTree_->setColumnCount(2);
@@ -32,7 +33,7 @@ modelTree_->setColumnCount(2);
 
 索引从0开始
 
-### 1.3. 设置表头
+### 4.3. 设置表头
 
 使用`setHeaderLabels(QStringList)`设置单列表头:
 
@@ -40,7 +41,7 @@ modelTree_->setColumnCount(2);
 modelTree_->setHeaderLabels({"Type", "size"});
 ```
 
-### 1.4. 设置列宽
+### 4.4. 设置列宽
 
 使用`setColumnWidth(int column, int width)`设置指定列的宽度:
 
@@ -51,7 +52,7 @@ modelTree_->setColumnWidth(0, 180);
 modelTree_->setColumnWidth(1,60);
 ```
 
-### 1.5. 创建根节点
+### 4.5. 创建根节点
 
 以`QTreeWidget`为父对象, 创建根节点:
 
@@ -73,7 +74,7 @@ root_item->setText(1, "1");
 |---------|------|
 | Model-1 |   1  |
 
-### 1.6. 创建子节点
+### 4.6. 创建子节点
 
 将另一个`QTreeWidgetItem`作为父对象:
 
@@ -87,7 +88,7 @@ node_item->setText(1, "100");
 |------|------|
 | Node | 100  |
 
-### 1.7. 展开节点
+### 4.7. 展开节点
 
 展开树中的全部节点：
 
@@ -107,7 +108,7 @@ rootItem->setExpanded(true);
 rootItem->setExpanded(false);
 ```
 
-### 1.8. Qt 对象所有权
+### 4.8. 对象所有权
 
 Qt 使用父子对象机制管理内存:
 
@@ -127,3 +128,5 @@ MainWindow
 ```
 
 父对象销毁时，其子对象也会被自动销毁
+
+## 5. QVTKOpenGLNativeWidget

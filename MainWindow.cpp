@@ -5,8 +5,14 @@
  * @param parent 父窗口指针
  */
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-    // 1. 初始化模型面板
+    // 初始化模型面板
     setupModelPanel();
+    // 初始化信息表格
+    setupInfoTable();
+    // 初始化日志窗口
+    setupLogWidget();
+    // 初始化中心区域
+    setupCentral();
 }
 
 /**
@@ -48,4 +54,52 @@ void MainWindow::setupModelPanel() {
 /**
  * @brief 初始化中心区域
  */
-void MainWindow::setupCentral() {}
+void MainWindow::setupCentral() {
+    // 创建vtk渲染窗口
+    vtkWidget_ = new QVTKOpenGLNativeWidget(this);
+
+    // 创建右侧区域: vtk渲染窗口 + 日志窗口
+    QSplitter *right = new QSplitter(Qt::Vertical, this);
+    right->addWidget(vtkWidget_);
+    right->addWidget(logWidget_);
+    right->setStretchFactor(0, 5);
+    right->setStretchFactor(1, 2);
+    right->setSizes({760, 190});
+
+    // 创建左侧区域: 模型树 + 信息表格
+    QSplitter *left = new QSplitter(Qt::Vertical, this);
+    left->addWidget(modelTree_);
+    left->addWidget(infoTable_);
+    left->setStretchFactor(0, 5);
+    left->setStretchFactor(1, 2);
+    left->setSizes({760, 190});
+
+    // 整体布局
+    QSplitter *splitter = new QSplitter(this);
+    splitter->addWidget(left);
+    splitter->addWidget(right);
+    splitter->setStretchFactor(1, 1);
+    splitter->setSizes({250, 950});
+    setCentralWidget(splitter);
+}
+
+/**
+ * @brief 初始化信息表格
+ * @details 创建信息表格并加入布局
+ */
+void MainWindow::setupInfoTable() {
+    const QStringList vertical = {"Element"};
+    const QStringList horizontal = {"Item", "Count"};
+    QTableWidgetItem *elem = new QTableWidgetItem(vertical[0]);
+    infoTable_ = new QTableWidget(vertical.size(), horizontal.size(), this);
+    infoTable_->setHorizontalHeaderLabels(horizontal);
+    infoTable_->setItem(0, 0, elem);
+}
+
+/**
+ * @brief 初始化日志窗口
+ */
+void MainWindow::setupLogWidget() {
+    logWidget_ = new QPlainTextEdit(this);
+    logWidget_->setReadOnly(true);
+}

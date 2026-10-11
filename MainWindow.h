@@ -1,6 +1,11 @@
 #pragma once
 #include <QMainWindow>
+#include <QPlainTextEdit>
+#include <QSplitter>
+#include <QTableWidget>
 #include <QTreeWidget>
+
+#include <QVTKOpenGLNativeWidget.h>
 
 /**
  * @brief 程序主窗口
@@ -31,7 +36,7 @@ private slots:
 
 private:
     /// @brief 初始化工具栏
-    void setupToolBar();
+    // void setupToolBar();
 
     /// @brief 初始化中心区域
     void setupCentral();
@@ -46,23 +51,32 @@ private:
     void setupLogWidget();
 
     /// @brief 初始化悬停选择
-    void setupHoverPicking();
+    // void setupHoverPicking();
 
     /// @brief 初始化HUD栏
-    void setupHudBar();
+    // void setupHudBar();
 
     /// @brief 更新信息表格
-    void updateInfoTable();
+    // void updateInfoTable();
 
     /// @brief 加载 ABAQUS inp 文件
     /// @param path 文件路径
     /// @return true 表示加载成功,false 表示加载失败
-    bool loadAbaqusInp(const QString &path);
+    // bool loadAbaqusInp(const QString &path);
 
     /// @brief 显示网格
-    void showGrid();
+    // void showGrid();
 
 private:
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
+
+    /// @brief vtk渲染窗口
+    QVTKOpenGLNativeWidget *vtkWidget_ = nullptr;
+
+    /// @brief 日志窗口
+    QPlainTextEdit *logWidget_ = nullptr;
+
+    /// @brief 信息表格
+    QTableWidget *infoTable_ = nullptr;
 };

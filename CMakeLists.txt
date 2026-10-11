@@ -21,8 +21,15 @@ set(CMAKE_PREFIX_PATH
   "D:/3rd/VTK-9.5.0/install")       # VTK
 
 # 查找 Qt 库
-find_package(Qt6 CONFIG REQUIRED)
-find_package(VTK CONFIG REQUIRED)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS
+  Widgets
+  OpenGLWidgets
+)
+find_package(VTK CONFIG REQUIRED COMPONENTS
+  CommonCore
+  GUISupportQt
+  RenderingOpenGL2
+)
 message(STATUS "Qt6_DIR: ${Qt6_DIR}")
 message(STATUS "VTK_DIR: ${VTK_DIR}")
 
@@ -39,7 +46,10 @@ target_include_directories(CAEStudio PRIVATE
 # 链接 Qt + VTK
 target_link_libraries(CAEStudio PRIVATE
   Qt6::Widgets
-  Qt6::OpenGLWidgets)
+  Qt6::OpenGLWidgets
+  VTK::GUISupportQt
+  VTK::RenderingOpenGL2
+)
 
 # 检查生成平台
 if (MSVC AND CMAKE_GENERATOR_PLATFORM)
