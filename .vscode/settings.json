@@ -1,0 +1,15 @@
+{
+    // 配置c++格式化器
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools", // 指定默认formatter
+    "editor.formatOnSave": true // 开启格式化保存
+  },
+  "[c]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools", // 指定默认formatter
+    "editor.formatOnSave": true // 开启格式化保存
+  },
+  "C_Cpp.formatting": "clangFormat",  // 指定格式化引擎
+  "C_Cpp.clang_format_style": "file",  // 从.clang-format读取样式
+
+  "markdown.extension.toc.levels": "2..2" // 生成目录的标题级别
+}

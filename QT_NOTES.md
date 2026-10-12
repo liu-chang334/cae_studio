@@ -8,7 +8,96 @@
 
 ## 1. QPlainTextEdit
 
+`QPlainTextEdit`用于显示和编辑多行纯文本的控件, 如日志窗口
+
+### 1.1. 引入头文件
+
+```cpp
+#include <QPlainTextEdit>
+```
+
+### 1.2. 指针声明与对象创建
+
+声明指针并将其初始化为`nullptr`, 不会创建控件:
+
+```cpp
+QPlainTextEdit* textEdit = nullptr;
+```
+
+使用关键字`new`和构造函数`QPlainTextEdit(QWidget* parent=nullptr)`创建, 指针才指向实际控件:
+
+```cpp
+///@param parent 父控件指针
+QPlainTextEdit* textEdit = new QPlainTextEdit(parent);
+```
+
+### 1.3. 设置只读状态
+
+使用`setReadOnly(bool)`设置是否允许用户编辑文本:
+
+```cpp
+///@param readOnly 是否只读标识
+textEdit->setReadOnly(true);
+```
+
+### 1.4. 加入分割器
+
+使用`QSplitter::addWidget(QWidget* widget)`将控件加入分割器:
+
+```cpp
+///@param widget 要加入分割器的控件
+splitter->addWidget(textEdit);
+```
+
+控件排列方向由分割器决定:
+
+- `QSplitter::Horizontal` 水平方向
+- `QSplitter::Vertical` 垂直方向
+
+控件按加入顺序排列, 加入后, 分割器会成为该控件的父控件, 并管理它的大小和位置
+
 ## 2. QSplitter
+
+分割器控件, 用于将多个控件排列在一起
+
+### 2.1. 引入头文件
+
+```cpp
+#include <QSplitter>
+```
+
+### 2.2. 创建分割器
+
+创建时可以指定排列方向和父控件:
+
+```cpp
+///@param orientation 控件排列方向
+///@param parent 父控件指针
+QSplitter* splitter = new QSplitter(Qt::Horizontal, parent);
+```
+
+如果只传入父控件, 默认水平排列
+
+### 2.3. 添加控件
+
+使用`addWidget(QWidget* widget)`向分割器中添加控件:
+
+```cpp
+///@param widget 已经创建的控件
+splitter->addWidget(widget);
+```
+
+加入后, 分割器会成为该控件的父控件, 管理其大小,位置和生命周期
+
+传入的指针必须指向已经创建的控件, 不能是空指针
+
+### 2.4. 设置各区域大小
+
+### 2.5. 设置伸缩因子
+
+### 2.6. 嵌套分割器
+
+### 2.7. 作为主窗口中央控件
 
 ## 3. QTableWidgetItem
 
