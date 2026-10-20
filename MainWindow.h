@@ -1,11 +1,22 @@
 #pragma once
+#include <QFileDialog>
 #include <QMainWindow>
 #include <QPlainTextEdit>
 #include <QSplitter>
 #include <QTableWidget>
+#include <QToolBar>
 #include <QTreeWidget>
 
 #include <QVTKOpenGLNativeWidget.h>
+#include <vtkActor.h>
+#include <vtkDataSetMapper.h>
+#include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkPoints.h>
+#include <vtkProperty.h>
+#include <vtkRenderWindow.h>
+#include <vtkRenderer.h>
+#include <vtkSmartPointer.h>
+#include <vtkUnstructuredGrid.h>
 
 /**
  * @brief 程序主窗口
@@ -24,7 +35,7 @@ public:
 
 private slots:
     /// @brief 打开文件
-    // void onOpenFile();
+    void onOpenFile();
 
     /// @brief 切换线框模式
     /// @param checked true 表示启用,false 表示关闭
@@ -36,7 +47,7 @@ private slots:
 
 private:
     /// @brief 初始化工具栏
-    // void setupToolBar();
+    void setupToolBar();
 
     /// @brief 初始化中心区域
     void setupCentral();
@@ -62,12 +73,18 @@ private:
     /// @brief 加载 ABAQUS inp 文件
     /// @param path 文件路径
     /// @return true 表示加载成功,false 表示加载失败
-    // bool loadAbaqusInp(const QString &path);
+    bool loadAbaqusInp(const QString &path);
 
     /// @brief 显示网格
-    // void showGrid();
+    void showGrid();
 
 private:
+    /// @brief 网格
+    vtkSmartPointer<vtkUnstructuredGrid> grid_ = nullptr;
+
+    /// @brief 演员
+    vtkSmartPointer<vtkActor> meshActor_ = nullptr;
+
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
 
@@ -79,4 +96,10 @@ private:
 
     /// @brief 信息表格
     QTableWidget *infoTable_ = nullptr;
+
+    /// @brief 工具条
+    QToolBar *toolBar_ = nullptr;
+
+    /// @brief 渲染器
+    vtkSmartPointer<vtkRenderer> renderer_ = nullptr;
 };
