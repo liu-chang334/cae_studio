@@ -1,4 +1,6 @@
 #pragma once
+#include "vtkScene.h"
+
 #include <QFileDialog>
 #include <QMainWindow>
 #include <QPlainTextEdit>
@@ -6,17 +8,7 @@
 #include <QTableWidget>
 #include <QToolBar>
 #include <QTreeWidget>
-
 #include <QVTKOpenGLNativeWidget.h>
-#include <vtkActor.h>
-#include <vtkDataSetMapper.h>
-#include <vtkGenericOpenGLRenderWindow.h>
-#include <vtkPoints.h>
-#include <vtkProperty.h>
-#include <vtkRenderWindow.h>
-#include <vtkRenderer.h>
-#include <vtkSmartPointer.h>
-#include <vtkUnstructuredGrid.h>
 
 /**
  * @brief 程序主窗口
@@ -82,9 +74,6 @@ private:
     /// @brief 网格
     vtkSmartPointer<vtkUnstructuredGrid> grid_ = nullptr;
 
-    /// @brief 演员
-    vtkSmartPointer<vtkActor> meshActor_ = nullptr;
-
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
 
@@ -100,6 +89,6 @@ private:
     /// @brief 工具条
     QToolBar *toolBar_ = nullptr;
 
-    /// @brief 渲染器
-    vtkSmartPointer<vtkRenderer> renderer_ = nullptr;
+    /// @brief vtk场景
+    vtkScene scene_;
 };

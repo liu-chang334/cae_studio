@@ -1,5 +1,11 @@
 #include "MainWindow.h"
 
+#include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkPoints.h>
+#include <vtkRenderWindow.h>
+#include <vtkRenderer.h>
+#include <vtkUnstructuredGrid.h>
+
 /**
  * @brief MainWindow 构造函数
  * @param parent 父窗口指针
@@ -90,12 +96,7 @@ void MainWindow::setupCentral() {
 
     auto renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
     vtkWidget_->setRenderWindow(renderWindow);
-    renderer_ = vtkSmartPointer<vtkRenderer>::New();
-    renderWindow->AddRenderer(renderer_);
-    renderer_->GradientBackgroundOn();        // 开启渐变背景
-    renderer_->SetBackground(0.8, 0.8, 0.8);  // 底部颜色
-    renderer_->SetBackground2(1.0, 1.0, 1.0); // 顶部颜色
-    vtkWidget_->renderWindow()->Render();
+    renderWindow->AddRenderer(scene_.renderer());
 }
 
 /**
@@ -158,7 +159,6 @@ void MainWindow::onOpenFile() {
  * @return true 表示加载成功,false 表示加载失败
  */
 bool MainWindow::loadAbaqusInp(const QString &path) {
-    renderer_->RemoveAllViewProps();
 
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -249,21 +249,6 @@ bool MainWindow::loadAbaqusInp(const QString &path) {
  * @brief 显示网格
  */
 void MainWindow::showGrid() {
-    if (!renderer_)
-        return;
-
-    auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
-    mapper->SetInputData(grid_);
-    auto meshActor = vtkSmartPointer<vtkActor>::New();
-    meshActor->SetMapper(mapper);
-    // set mesh property here.
-    meshActor->GetProperty()->SetColor(0.8, 0.8, 0.9);
-    meshActor->GetProperty()->EdgeVisibilityOn();
-    meshActor->GetProperty()->SetEdgeColor(0.2, 0.2, 0.3);
-    meshActor->GetProperty()->SetLineWidth(1.5);
-    meshActor_ = meshActor;
-
-    renderer_->AddActor(meshActor_);
-    renderer_->ResetCamera();
+    scene_.setMesh(grid_);
     vtkWidget_->renderWindow()->Render();
 }

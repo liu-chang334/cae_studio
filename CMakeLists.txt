@@ -37,6 +37,7 @@ message(STATUS "VTK_DIR: ${VTK_DIR}")
 add_executable(CAEStudio 
   main.cpp
   MainWindow.cpp
+  vtkScene.cpp
 )
 
 # 添加头文件搜索路径
