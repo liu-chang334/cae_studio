@@ -92,6 +92,9 @@ void MainWindow::setupCentral() {
     vtkWidget_->setRenderWindow(renderWindow);
     renderer_ = vtkSmartPointer<vtkRenderer>::New();
     renderWindow->AddRenderer(renderer_);
+    renderer_->GradientBackgroundOn();        // 开启渐变背景
+    renderer_->SetBackground(0.8, 0.8, 0.8);  // 底部颜色
+    renderer_->SetBackground2(1.0, 1.0, 1.0); // 顶部颜色
     vtkWidget_->renderWindow()->Render();
 }
 
