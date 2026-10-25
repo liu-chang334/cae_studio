@@ -1,5 +1,4 @@
 #pragma once
-#include "vtkScene.h"
 
 #include <QFileDialog>
 #include <QMainWindow>
@@ -9,6 +8,11 @@
 #include <QToolBar>
 #include <QTreeWidget>
 #include <QVTKOpenGLNativeWidget.h>
+
+#include <vtkSmartPointer.h>
+#include <vtkUnstructuredGrid.h>
+
+class MeshViewport;
 
 /**
  * @brief 程序主窗口
@@ -89,6 +93,6 @@ private:
     /// @brief 工具条
     QToolBar *toolBar_ = nullptr;
 
-    /// @brief vtk场景
-    vtkScene scene_;
+    /// @brief 网格视口
+    MeshViewport *viewport_ = nullptr;
 };

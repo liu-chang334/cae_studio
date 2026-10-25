@@ -38,6 +38,7 @@ add_executable(CAEStudio
   main.cpp
   MainWindow.cpp
   vtkScene.cpp
+  MeshViewport.cpp
 )
 
 # 添加头文件搜索路径

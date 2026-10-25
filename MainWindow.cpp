@@ -1,10 +1,10 @@
 #include "MainWindow.h"
+#include "MeshViewport.h"
 
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkPoints.h>
 #include <vtkRenderWindow.h>
 #include <vtkRenderer.h>
-#include <vtkUnstructuredGrid.h>
 
 /**
  * @brief MainWindow 构造函数
@@ -68,11 +68,11 @@ void MainWindow::setupModelPanel() {
  */
 void MainWindow::setupCentral() {
     // 创建vtk渲染窗口
-    vtkWidget_ = new QVTKOpenGLNativeWidget(this);
+    viewport_ = new MeshViewport(this);
 
     // 创建右侧区域: vtk渲染窗口 + 日志窗口
     QSplitter *right = new QSplitter(Qt::Vertical, this);
-    right->addWidget(vtkWidget_);
+    right->addWidget(viewport_);
     right->addWidget(logWidget_);
     right->setStretchFactor(0, 5);
     right->setStretchFactor(1, 2);
@@ -93,10 +93,6 @@ void MainWindow::setupCentral() {
     splitter->setStretchFactor(1, 1);
     splitter->setSizes({250, 950});
     setCentralWidget(splitter);
-
-    auto renderWindow = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
-    vtkWidget_->setRenderWindow(renderWindow);
-    renderWindow->AddRenderer(scene_.renderer());
 }
 
 /**
@@ -248,7 +244,4 @@ bool MainWindow::loadAbaqusInp(const QString &path) {
 /**
  * @brief 显示网格
  */
-void MainWindow::showGrid() {
-    scene_.setMesh(grid_);
-    vtkWidget_->renderWindow()->Render();
-}
+void MainWindow::showGrid() { viewport_->setMesh(grid_); }
