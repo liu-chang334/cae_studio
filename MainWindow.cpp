@@ -1,10 +1,6 @@
 #include "MainWindow.h"
+#include "AbaqusInpReader.h"
 #include "MeshViewport.h"
-
-#include <vtkGenericOpenGLRenderWindow.h>
-#include <vtkPoints.h>
-#include <vtkRenderWindow.h>
-#include <vtkRenderer.h>
 
 /**
  * @brief MainWindow 构造函数
@@ -143,105 +139,15 @@ void MainWindow::onOpenFile() {
     if (path.isEmpty())
         return;
 
-    if (loadAbaqusInp(path))
-        logWidget_->appendPlainText(tr("Successfully loaded!"));
-    else
-        logWidget_->appendPlainText(tr("Failed to load file!"));
-}
-
-/**
- * @brief 加载 ABAQUS inp 文件
- * @param path 文件路径
- * @return true 表示加载成功,false 表示加载失败
- */
-bool MainWindow::loadAbaqusInp(const QString &path) {
-
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        logWidget_->appendPlainText(tr("Failed to open: %1").arg(path));
-        return false;
+    AbaqusInpReader reader;
+    const auto result = reader.read(path);
+    if (!result.success()) {
+        logWidget_->appendPlainText(result.error);
+        return;
     }
+    viewport_->setMesh(result.grid);
 
-    QTextStream in(&f);
-    auto points = vtkSmartPointer<vtkPoints>::New();
-    auto ugrid = vtkSmartPointer<vtkUnstructuredGrid>::New();
-
-    QHash<int, vtkIdType> id2pid;
-    id2pid.reserve(1000000);
-
-    enum Section { None, Node, ElementC3D8 };
-    Section sec = None;
-
-    while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
-        if (line.isEmpty())
-            continue;
-        if (line.startsWith("**"))
-            continue;
-        if (line.startsWith("*")) {
-            const QString upper = line.toUpper();
-            if (upper.startsWith("*NODE")) {
-                sec = Node;
-            } else if (upper.startsWith("*ELEMENT")) {
-                if (upper.contains("TYPE=C3D8"))
-                    sec = ElementC3D8;
-                else
-                    sec = None;
-            } else {
-                sec = None;
-            }
-            continue;
-        }
-
-        const auto parts = line.split(',', Qt::SkipEmptyParts);
-
-        if (sec == Node) {
-            if (parts.size() < 4)
-                continue;
-            bool okId = false, okx = false, oky = false, okz = false;
-            int nid = parts[0].trimmed().toInt(&okId);
-            double x = parts[1].trimmed().toDouble(&okx);
-            double y = parts[2].trimmed().toDouble(&oky);
-            double z = parts[3].trimmed().toDouble(&okz);
-            if (!okId || !okx || !oky || !okz)
-                continue;
-
-            vtkIdType pid = points->InsertNextPoint(x, y, z);
-            id2pid.insert(nid, pid);
-        } else if (sec == ElementC3D8) {
-            if (parts.size() < 9)
-                continue;
-            bool ok = false;
-            int eid = parts[0].trimmed().toInt(&ok);
-            Q_UNUSED(eid);
-            if (!ok)
-                continue;
-
-            vtkIdType conn[8];
-            bool allok = true;
-            for (int i = 0; i < 8; i++) {
-                bool okn = false;
-                int nid = parts[i + 1].trimmed().toInt(&okn);
-                if (!okn || !id2pid.contains(nid)) {
-                    allok = false;
-                    break;
-                }
-                conn[i] = id2pid[nid];
-            }
-            if (!allok)
-                continue;
-            ugrid->InsertNextCell(VTK_HEXAHEDRON, 8, conn);
-        }
-    }
-
-    f.close();
-    ugrid->SetPoints(points);
-    grid_ = ugrid;
-    showGrid();
-    return true;
+    for (const auto &warning : result.warnings)
+        logWidget_->appendPlainText(warning);
+    logWidget_->appendPlainText(tr("Successfully loaded!"));
 }
-
-/**
- * @brief 显示网格
- */
-void MainWindow::showGrid() { viewport_->setMesh(grid_); }

@@ -9,9 +9,6 @@
 #include <QTreeWidget>
 #include <QVTKOpenGLNativeWidget.h>
 
-#include <vtkSmartPointer.h>
-#include <vtkUnstructuredGrid.h>
-
 class MeshViewport;
 
 /**
@@ -75,9 +72,6 @@ private:
     void showGrid();
 
 private:
-    /// @brief 网格
-    vtkSmartPointer<vtkUnstructuredGrid> grid_ = nullptr;
-
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
 

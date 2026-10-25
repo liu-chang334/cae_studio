@@ -39,6 +39,7 @@ add_executable(CAEStudio
   MainWindow.cpp
   vtkScene.cpp
   MeshViewport.cpp
+  AbaqusInpReader.cpp
 )
 
 # 添加头文件搜索路径
