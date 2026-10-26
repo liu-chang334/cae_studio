@@ -63,11 +63,6 @@ private:
     /// @brief 更新信息表格
     // void updateInfoTable();
 
-    /// @brief 加载 ABAQUS inp 文件
-    /// @param path 文件路径
-    /// @return true 表示加载成功,false 表示加载失败
-    bool loadAbaqusInp(const QString &path);
-
     /// @brief 显示网格
     void showGrid();
 

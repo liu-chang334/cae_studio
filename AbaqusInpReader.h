@@ -1,19 +1,20 @@
 #pragma once
+#include "MeshData.h"
+
 #include <QString>
 #include <QStringList>
-#include <vtkSmartPointer.h>
 
-class vtkUnstructuredGrid;
-
-struct MeshImportResult {
-    vtkSmartPointer<vtkUnstructuredGrid> grid;
+struct MeshReadResult {
+    MeshData mesh;
     QString error;
     QStringList warnings;
 
-    bool success() const { return grid != nullptr && error.isEmpty(); }
+    bool success() const {
+        return error.isEmpty() && !mesh.nodes.empty() && !mesh.elements.empty();
+    }
 };
 
 class AbaqusInpReader {
 public:
-    MeshImportResult read(const QString &path) const;
+    MeshReadResult read(const QString &path) const;
 };

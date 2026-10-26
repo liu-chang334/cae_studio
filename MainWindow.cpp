@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "AbaqusInpReader.h"
 #include "MeshViewport.h"
+#include "vtkMeshBuilder.h"
 
 /**
  * @brief MainWindow 构造函数
@@ -140,14 +141,19 @@ void MainWindow::onOpenFile() {
         return;
 
     AbaqusInpReader reader;
-    const auto result = reader.read(path);
+    const auto meshdata = reader.read(path);
+    for (const auto &warning : meshdata.warnings)
+        logWidget_->appendPlainText(warning);
+    if (!meshdata.success()) {
+        logWidget_->appendPlainText(meshdata.error);
+        return;
+    }
+    vtkMeshBuilder builder;
+    const auto result = builder.build(meshdata.mesh);
     if (!result.success()) {
         logWidget_->appendPlainText(result.error);
         return;
     }
     viewport_->setMesh(result.grid);
-
-    for (const auto &warning : result.warnings)
-        logWidget_->appendPlainText(warning);
-    logWidget_->appendPlainText(tr("Successfully loaded!"));
+    logWidget_->appendPlainText("模型加载成功.");
 }
