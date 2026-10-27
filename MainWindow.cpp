@@ -1,7 +1,7 @@
 #include "MainWindow.h"
 #include "AbaqusInpReader.h"
 #include "MeshViewport.h"
-#include "vtkMeshBuilder.h"
+#include "vtkBuilder.h"
 
 /**
  * @brief MainWindow 构造函数
@@ -148,7 +148,7 @@ void MainWindow::onOpenFile() {
         logWidget_->appendPlainText(meshdata.error);
         return;
     }
-    vtkMeshBuilder builder;
+    vtkBuilder builder;
     const auto result = builder.build(meshdata.mesh);
     if (!result.success()) {
         logWidget_->appendPlainText(result.error);

@@ -5,6 +5,10 @@ class vtkActor;
 class vtkRenderer;
 class vtkUnstructuredGrid;
 
+/**
+ * @brief vtk场景类
+ * @details 管理vtk场景, 场景对象, 渲染器, 相机
+ */
 class vtkScene {
 public:
     vtkScene();
@@ -13,7 +17,7 @@ public:
     vtkRenderer *renderer() const;
 
     void setMesh(vtkUnstructuredGrid *grid);
-    void clearMesh();
+    void clear();
     void resetCamera();
 
 private:

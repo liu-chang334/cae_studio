@@ -6,13 +6,13 @@
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
 
-struct vtkMeshBuildResult {
+struct vtkBuildResult {
     vtkSmartPointer<vtkUnstructuredGrid> grid;
     QString error;
     bool success() const { return grid != nullptr && error.isEmpty(); }
 };
 
-class vtkMeshBuilder {
+class vtkBuilder {
 public:
-    vtkMeshBuildResult build(const MeshData &mesh) const;
+    vtkBuildResult build(const MeshData &mesh) const;
 };

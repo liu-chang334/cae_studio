@@ -1,7 +1,8 @@
-#include "vtkMeshBuilder.h"
+#include "vtkBuilder.h"
 
-vtkMeshBuildResult vtkMeshBuilder::build(const MeshData &mesh) const {
-    vtkMeshBuildResult result;
+vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
+    vtkBuildResult result;
+    // 检查网格数据是否有效
     if (mesh.nodes.empty() || mesh.elements.empty()) {
         result.error = QStringLiteral("网格节点或单元为空");
         return result;

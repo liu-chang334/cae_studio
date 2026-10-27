@@ -1,7 +1,9 @@
 #include "vtkScene.h"
 
 #include <vtkActor.h>
+#include <vtkAxesActor.h>
 #include <vtkDataSetMapper.h>
+#include <vtkOrientationMarkerWidget.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
 #include <vtkUnstructuredGrid.h>
@@ -26,14 +28,14 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid) {
     actor->GetProperty()->EdgeVisibilityOn();
     actor->GetProperty()->SetEdgeColor(0.2, 0.2, 0.3);
     actor->GetProperty()->SetLineWidth(1.5);
-    clearMesh();
+    clear();
     grid_ = grid;
     meshActor_ = actor;
     renderer_->AddActor(meshActor_);
     resetCamera();
 }
 
-void vtkScene::clearMesh() {
+void vtkScene::clear() {
     if (meshActor_)
         renderer_->RemoveActor(meshActor_);
     meshActor_ = nullptr;

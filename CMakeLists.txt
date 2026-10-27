@@ -29,6 +29,8 @@ find_package(VTK CONFIG REQUIRED COMPONENTS
   CommonCore
   GUISupportQt
   RenderingOpenGL2
+  InteractionWidgets
+  RenderingAnnotation
 )
 message(STATUS "Qt6_DIR: ${Qt6_DIR}")
 message(STATUS "VTK_DIR: ${VTK_DIR}")
@@ -40,7 +42,7 @@ add_executable(CAEStudio
   vtkScene.cpp
   MeshViewport.cpp
   AbaqusInpReader.cpp
-  vtkMeshBuilder.cpp
+  vtkBuilder.cpp
 )
 
 # 添加头文件搜索路径
@@ -53,6 +55,8 @@ target_link_libraries(CAEStudio PRIVATE
   Qt6::OpenGLWidgets
   VTK::GUISupportQt
   VTK::RenderingOpenGL2
+  VTK::InteractionWidgets
+  VTK::RenderingAnnotation
 )
 
 # 检查生成平台

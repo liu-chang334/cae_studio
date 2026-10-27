@@ -70,9 +70,6 @@ private:
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
 
-    /// @brief vtk渲染窗口
-    QVTKOpenGLNativeWidget *vtkWidget_ = nullptr;
-
     /// @brief 日志窗口
     QPlainTextEdit *logWidget_ = nullptr;
 

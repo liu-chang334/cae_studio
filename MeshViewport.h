@@ -1,9 +1,12 @@
 #pragma once
 
 #include <QVTKOpenGLNativeWidget.h>
-#include <vtkUnstructuredGrid.h>
+#include <vtkSmartPointer.h>
 
+class QWidget;
 class vtkScene;
+class vtkUnstructuredGrid;
+class vtkOrientationMarkerWidget;
 
 class MeshViewport : public QVTKOpenGLNativeWidget {
 public:
@@ -11,9 +14,10 @@ public:
     ~MeshViewport() override;
 
     void setMesh(vtkUnstructuredGrid *grid);
-    void clearMesh();
+    void clear();
     void resetCamera();
 
 private:
     vtkScene *scene_ = nullptr;
+    vtkSmartPointer<vtkOrientationMarkerWidget> orientationWidget_ = nullptr;
 };
