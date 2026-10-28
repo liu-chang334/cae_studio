@@ -3,10 +3,8 @@
 #include "MeshViewport.h"
 #include "vtkBuilder.h"
 
-/**
- * @brief MainWindow 构造函数
- * @param parent 父窗口指针
- */
+#include <utility>
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     // 初始化模型面板
     setupModelPanel();
@@ -24,9 +22,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     // setMinimumSize(600, 400);
 }
 
-/**
- * @brief 初始化模型面板
- */
 void MainWindow::setupModelPanel() {
     /// 创建树控件, this为父对象
     modelTree_ = new QTreeWidget(this);
@@ -41,10 +36,10 @@ void MainWindow::setupModelPanel() {
     root_item->setText(0, "Model-1");
 
     // 创建子节点
-    QTreeWidgetItem *node_item = new QTreeWidgetItem(root_item);
-    node_item->setText(0, "Node");
-    QTreeWidgetItem *elem_item = new QTreeWidgetItem(root_item);
-    elem_item->setText(0, "Element");
+    nodeItem_ = new QTreeWidgetItem(root_item);
+    nodeItem_->setText(0, "Node");
+    elemItem_ = new QTreeWidgetItem(root_item);
+    elemItem_->setText(0, "Element");
     QTreeWidgetItem *nset_item = new QTreeWidgetItem(root_item);
     nset_item->setText(0, "Nset");
     QTreeWidgetItem *elemset_item = new QTreeWidgetItem(root_item);
@@ -56,13 +51,10 @@ void MainWindow::setupModelPanel() {
     QTreeWidgetItem *job_item = new QTreeWidgetItem(root_item);
     job_item->setText(0, "Job");
 
-    // 展开所有节点
     modelTree_->expandAll();
+    updateModelTree();
 }
 
-/**
- * @brief 初始化中心区域
- */
 void MainWindow::setupCentral() {
     // 创建vtk渲染窗口
     viewport_ = new MeshViewport(this);
@@ -92,10 +84,12 @@ void MainWindow::setupCentral() {
     setCentralWidget(splitter);
 }
 
-/**
- * @brief 初始化信息表格
- * @details 创建信息表格并加入布局
- */
+void MainWindow::updateModelTree() {
+    nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodes.size())));
+    elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.elements.size())));
+    modelTree_->resizeColumnToContents(1);
+}
+
 void MainWindow::setupInfoTable() {
     const QStringList vertical = {"Element"};
     const QStringList horizontal = {"Item", "Count"};
@@ -105,17 +99,11 @@ void MainWindow::setupInfoTable() {
     infoTable_->setItem(0, 0, elem);
 }
 
-/**
- * @brief 初始化日志窗口
- */
 void MainWindow::setupLogWidget() {
     logWidget_ = new QPlainTextEdit(this);
     logWidget_->setReadOnly(true);
 }
 
-/**
- * @brief 初始化工具栏
- */
 void MainWindow::setupToolBar() {
     toolBar_ = addToolBar(tr("Main")); // 添加工具栏
     toolBar_->setMovable(false);       // 禁用用户拖动
@@ -131,9 +119,6 @@ void MainWindow::setupToolBar() {
     toolBar_->addAction(actOpen_);
 }
 
-/**
- * @brief 打开文件
- */
 void MainWindow::onOpenFile() {
     const QString filter = tr("Mesh files (*.msh *.vtu *.vtk *.inp)");
     const QString path = QFileDialog::getOpenFileName(this, tr("Open File"), QString(), filter);
@@ -141,7 +126,7 @@ void MainWindow::onOpenFile() {
         return;
 
     AbaqusInpReader reader;
-    const auto meshdata = reader.read(path);
+    auto meshdata = reader.read(path);
     for (const auto &warning : meshdata.warnings)
         logWidget_->appendPlainText(warning);
     if (!meshdata.success()) {
@@ -154,6 +139,10 @@ void MainWindow::onOpenFile() {
         logWidget_->appendPlainText(result.error);
         return;
     }
+    currentMesh_ = std::move(meshdata.mesh);
     viewport_->setMesh(result.grid);
-    logWidget_->appendPlainText("模型加载成功.");
+    updateModelTree();
+    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点，%2 个单元.")
+                                    .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
+                                    .arg(static_cast<qulonglong>(currentMesh_.elements.size())));
 }

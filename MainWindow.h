@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MeshData.h"
+
 #include <QFileDialog>
 #include <QMainWindow>
 #include <QPlainTextEdit>
@@ -48,6 +50,9 @@ private:
     /// @brief 初始化模型面板
     void setupModelPanel();
 
+    /// @brief 根据当前网格更新模型树
+    void updateModelTree();
+
     /// @brief 初始化信息表格
     void setupInfoTable();
 
@@ -70,6 +75,12 @@ private:
     /// @brief 模型树
     QTreeWidget *modelTree_ = nullptr;
 
+    ///@brief 节点统计条目
+    QTreeWidgetItem *nodeItem_ = nullptr;
+
+    ///@brief 单元统计条目
+    QTreeWidgetItem *elemItem_ = nullptr;
+
     /// @brief 日志窗口
     QPlainTextEdit *logWidget_ = nullptr;
 
@@ -80,5 +91,10 @@ private:
     QToolBar *toolBar_ = nullptr;
 
     /// @brief 网格视口
+    /// @details 第1份数据, 用于vtk显示
     MeshViewport *viewport_ = nullptr;
+
+    /// @brief 当前网格数据
+    /// @details 第2份数据, 用于统计
+    MeshData currentMesh_;
 };
