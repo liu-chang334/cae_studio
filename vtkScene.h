@@ -1,4 +1,8 @@
 #pragma once
+
+#include "MeshData.h"
+
+#include <optional>
 #include <vtkSmartPointer.h>
 
 class vtkActor;
@@ -19,6 +23,7 @@ public:
     void setMesh(vtkUnstructuredGrid *grid);
     void clear();
     void resetCamera();
+    std::optional<MeshId> pickElement(int x, int y);
 
 private:
     vtkSmartPointer<vtkRenderer> renderer_;

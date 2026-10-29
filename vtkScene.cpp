@@ -2,6 +2,8 @@
 
 #include <vtkActor.h>
 #include <vtkAxesActor.h>
+#include <vtkCellData.h>
+#include <vtkCellPicker.h>
 #include <vtkDataSetMapper.h>
 #include <vtkOrientationMarkerWidget.h>
 #include <vtkProperty.h>
@@ -43,3 +45,17 @@ void vtkScene::clear() {
 }
 
 void vtkScene::resetCamera() { renderer_->ResetCamera(); }
+
+std::optional<MeshId> vtkScene::pickElement(int x, int y) {
+    if (!grid_ || !meshActor_)
+        return std::nullopt;
+    auto picker = vtkSmartPointer<vtkCellPicker>::New();
+    picker->PickFromListOn();
+    picker->AddPickList(meshActor_);
+    if (!picker->Pick(x, y, 0.0, renderer_))
+        return std::nullopt;
+    const vtkIdType cellId = picker->GetCellId(); // vtk内部单元索引
+    auto *elementIds =
+        vtkTypeInt64Array::SafeDownCast(grid_->GetCellData()->GetArray("ElementIds"));
+    return static_cast<MeshId>(elementIds->GetValue(cellId)); // 原始单元编号
+}

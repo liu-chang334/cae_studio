@@ -1,5 +1,7 @@
 #include "vtkBuilder.h"
 
+#include <vtkCellData.h>
+
 vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     vtkBuildResult result;
     // 检查网格数据是否有效
@@ -23,6 +25,9 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
         id2pid.emplace(node.id, pid);
     }
     grid->SetPoints(points);
+    auto elementIds = vtkSmartPointer<vtkTypeInt64Array>::New();
+    elementIds->SetName("ElementIds");
+    elementIds->SetNumberOfComponents(1);
     for (const auto &element : mesh.elements) {
         if (element.type != ElementType::Hex8 || element.nodeIds.size() != 8) {
             result.error = QStringLiteral("单元 %1 的类型或节点数量无效")
@@ -41,7 +46,9 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
             conn[i] = it->second;
         }
         grid->InsertNextCell(VTK_HEXAHEDRON, 8, conn);
+        elementIds->InsertNextValue(static_cast<vtkTypeInt64>(element.id)); // 保留原始单元号
     }
+    grid->GetCellData()->AddArray(elementIds);
     result.grid = grid;
     return result;
 }

@@ -59,6 +59,13 @@ void MainWindow::setupCentral() {
     // 创建vtk渲染窗口
     viewport_ = new MeshViewport(this);
 
+    connect(viewport_, &MeshViewport::elementPicked, this, [this](MeshId elementId) {
+        logWidget_->appendPlainText(tr("选中单元：%1").arg(static_cast<qlonglong>(elementId)));
+    });
+
+    connect(viewport_, &MeshViewport::selectionCleared, this,
+            [this]() { logWidget_->appendPlainText(tr("已取消选择")); });
+
     // 创建右侧区域: vtk渲染窗口 + 日志窗口
     QSplitter *right = new QSplitter(Qt::Vertical, this);
     right->addWidget(viewport_);
