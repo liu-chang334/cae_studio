@@ -56,6 +56,10 @@ private:
     /// @brief 初始化信息表格
     void setupInfoTable();
 
+    /// @brief 在信息表格中显示选中单元信息
+    /// @param elementId 选中单元编号
+    void showElementInfo(MeshId elementId);
+
     /// @brief 初始化日志窗口
     void setupLogWidget();
 

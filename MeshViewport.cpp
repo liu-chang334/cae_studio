@@ -83,6 +83,7 @@ void MeshViewport::mouseReleaseEvent(QMouseEvent *event) {
     const int height = renderWindow()->GetSize()[1];
     const int y = height - 1 - yFromTop;
     const auto elementId = scene_->pickElement(x, y);
+    renderWindow()->Render(); // 刷新渲染, 高亮选中单元
 
     if (elementId)
         emit elementPicked(*elementId);

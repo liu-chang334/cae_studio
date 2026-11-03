@@ -60,11 +60,14 @@ void MainWindow::setupCentral() {
     viewport_ = new MeshViewport(this);
 
     connect(viewport_, &MeshViewport::elementPicked, this, [this](MeshId elementId) {
+        showElementInfo(elementId);
         logWidget_->appendPlainText(tr("选中单元：%1").arg(static_cast<qlonglong>(elementId)));
     });
 
-    connect(viewport_, &MeshViewport::selectionCleared, this,
-            [this]() { logWidget_->appendPlainText(tr("已取消选择")); });
+    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() {
+        infoTable_->setRowCount(0);
+        logWidget_->appendPlainText(tr("已取消选择"));
+    });
 
     // 创建右侧区域: vtk渲染窗口 + 日志窗口
     QSplitter *right = new QSplitter(Qt::Vertical, this);
@@ -98,12 +101,40 @@ void MainWindow::updateModelTree() {
 }
 
 void MainWindow::setupInfoTable() {
-    const QStringList vertical = {"Element"};
-    const QStringList horizontal = {"Item", "Count"};
-    QTableWidgetItem *elem = new QTableWidgetItem(vertical[0]);
-    infoTable_ = new QTableWidget(vertical.size(), horizontal.size(), this);
-    infoTable_->setHorizontalHeaderLabels(horizontal);
-    infoTable_->setItem(0, 0, elem);
+    infoTable_ = new QTableWidget(0, 2, this);
+    infoTable_->setHorizontalHeaderLabels({tr("属性"), tr("值")});
+    infoTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+}
+
+void MainWindow::showElementInfo(MeshId elementId) {
+    const auto &elements = currentMesh_.elements;
+    const auto it =
+        std::find_if(elements.begin(), elements.end(),
+                     [elementId](const MeshElement &element) { return element.id == elementId; });
+    if (it == elements.end()) {
+        infoTable_->setRowCount(0);
+        return;
+    }
+    const MeshElement &element = *it;
+    QStringList nodeIds;
+    for (MeshId nodeId : element.nodeIds)
+        nodeIds.append(QString::number(static_cast<qlonglong>(nodeId)));
+    QString typeName = tr("未知");
+    switch (element.type) {
+    case ElementType::Hex8:
+        typeName = QStringLiteral("Hex8");
+        break;
+    }
+    infoTable_->setRowCount(3);
+    infoTable_->setItem(0, 0, new QTableWidgetItem(tr("单元编号")));
+    infoTable_->setItem(0, 1,
+                        new QTableWidgetItem(QString::number(static_cast<qlonglong>(element.id))));
+    infoTable_->setItem(1, 0, new QTableWidgetItem(tr("单元类型")));
+    infoTable_->setItem(1, 1, new QTableWidgetItem(typeName));
+    infoTable_->setItem(2, 0, new QTableWidgetItem(tr("拓扑节点")));
+    infoTable_->setItem(2, 1, new QTableWidgetItem(nodeIds.join(QStringLiteral(", "))));
+    infoTable_->resizeColumnToContents(0);
+    infoTable_->resizeColumnToContents(1);
 }
 
 void MainWindow::setupLogWidget() {
@@ -149,6 +180,7 @@ void MainWindow::onOpenFile() {
     currentMesh_ = std::move(meshdata.mesh);
     viewport_->setMesh(result.grid);
     updateModelTree();
+    infoTable_->setRowCount(0);
     logWidget_->appendPlainText(tr("模型加载成功: %1 个节点，%2 个单元.")
                                     .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
                                     .arg(static_cast<qulonglong>(currentMesh_.elements.size())));

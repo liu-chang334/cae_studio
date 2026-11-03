@@ -26,7 +26,11 @@ public:
     std::optional<MeshId> pickElement(int x, int y);
 
 private:
+    void highlightCell(vtkIdType cellId);
+    void clearHighlight();
+
     vtkSmartPointer<vtkRenderer> renderer_;
     vtkSmartPointer<vtkActor> meshActor_;
     vtkSmartPointer<vtkUnstructuredGrid> grid_;
+    vtkSmartPointer<vtkActor> highlightActor_;
 };
