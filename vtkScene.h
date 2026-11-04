@@ -23,11 +23,13 @@ public:
     void setMesh(vtkUnstructuredGrid *grid);
     void clear();
     void resetCamera();
+    void clearHighlight();
     std::optional<MeshId> pickElement(int x, int y);
+    std::optional<MeshId> pickNode(int x, int y);
 
 private:
     void highlightCell(vtkIdType cellId);
-    void clearHighlight();
+    void highlightNode(vtkIdType pointId);
 
     vtkSmartPointer<vtkRenderer> renderer_;
     vtkSmartPointer<vtkActor> meshActor_;

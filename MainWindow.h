@@ -60,6 +60,10 @@ private:
     /// @param elementId 选中单元编号
     void showElementInfo(MeshId elementId);
 
+    /// @brief 在信息表格中显示选中节点信息
+    /// @param nodeId 选中节点编号
+    void showNodeInfo(MeshId nodeId);
+
     /// @brief 初始化日志窗口
     void setupLogWidget();
 

@@ -1,6 +1,7 @@
 #include "vtkBuilder.h"
 
 #include <vtkCellData.h>
+#include <vtkPointData.h>
 
 vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     vtkBuildResult result;
@@ -14,6 +15,9 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     auto grid = vtkSmartPointer<vtkUnstructuredGrid>::New();
     std::unordered_map<MeshId, vtkIdType> id2pid;
     id2pid.reserve(mesh.nodes.size());
+    auto nodeIds = vtkSmartPointer<vtkTypeInt64Array>::New();
+    nodeIds->SetName("NodeIds");
+    nodeIds->SetNumberOfComponents(1);
     for (const auto &node : mesh.nodes) {
         if (id2pid.find(node.id) != id2pid.end()) {
             result.error =
@@ -22,9 +26,11 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
         }
         const auto &xyz = node.coordinates;
         vtkIdType pid = points->InsertNextPoint(xyz[0], xyz[1], xyz[2]);
+        nodeIds->InsertNextValue(static_cast<vtkTypeInt64>(node.id));
         id2pid.emplace(node.id, pid);
     }
     grid->SetPoints(points);
+    grid->GetPointData()->AddArray(nodeIds);
     auto elementIds = vtkSmartPointer<vtkTypeInt64Array>::New();
     elementIds->SetName("ElementIds");
     elementIds->SetNumberOfComponents(1);

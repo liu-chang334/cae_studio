@@ -20,12 +20,20 @@ public:
     void clear();
     void resetCamera();
 
+    void setNodePickingEnabled(bool enabled);
+
 signals:
     /**
      * @brief 选中一个单元
      * @param elementId 原始单元编号
      */
     void elementPicked(MeshId elementId);
+
+    /**
+     * @brief 选中一个节点
+     * @param nodeId 原始节点编号
+     */
+    void nodePicked(MeshId nodeId);
 
     /**
      * @brief 点击空白, 取消选择
@@ -40,6 +48,7 @@ protected:
 private:
     QPoint pressPosition_;
     bool clickCandidate_ = false;
+    bool nodePickingEnabled_ = false;
 
     vtkScene *scene_ = nullptr;
     vtkSmartPointer<vtkOrientationMarkerWidget> orientationWidget_ = nullptr;

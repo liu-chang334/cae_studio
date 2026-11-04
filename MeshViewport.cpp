@@ -82,6 +82,18 @@ void MeshViewport::mouseReleaseEvent(QMouseEvent *event) {
 
     const int height = renderWindow()->GetSize()[1];
     const int y = height - 1 - yFromTop;
+
+    if (nodePickingEnabled_) {
+        const auto nodeId = scene_->pickNode(x, y);
+        renderWindow()->Render();
+
+        if (nodeId)
+            emit nodePicked(*nodeId);
+        else
+            emit selectionCleared();
+        return;
+    }
+
     const auto elementId = scene_->pickElement(x, y);
     renderWindow()->Render(); // 刷新渲染, 高亮选中单元
 
@@ -89,4 +101,13 @@ void MeshViewport::mouseReleaseEvent(QMouseEvent *event) {
         emit elementPicked(*elementId);
     else
         emit selectionCleared();
+}
+
+void MeshViewport::setNodePickingEnabled(bool enabled) {
+    if (nodePickingEnabled_ == enabled)
+        return;
+    nodePickingEnabled_ = enabled;
+    scene_->clearHighlight();
+    renderWindow()->Render();
+    emit selectionCleared();
 }

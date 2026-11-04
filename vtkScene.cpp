@@ -7,6 +7,8 @@
 #include <vtkDataSetMapper.h>
 #include <vtkExtractCells.h>
 #include <vtkOrientationMarkerWidget.h>
+#include <vtkPointData.h>
+#include <vtkPointPicker.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
 #include <vtkUnstructuredGrid.h>
@@ -72,6 +74,25 @@ std::optional<MeshId> vtkScene::pickElement(int x, int y) {
     return static_cast<MeshId>(elementIds->GetValue(cellId)); // 原始单元编号
 }
 
+std::optional<MeshId> vtkScene::pickNode(int x, int y) {
+    clearHighlight();
+
+    if (!grid_ || !meshActor_)
+        return std::nullopt;
+    auto picker = vtkSmartPointer<vtkPointPicker>::New();
+    picker->PickFromListOn();
+    picker->AddPickList(meshActor_);
+    if (!picker->Pick(x, y, 0.0, renderer_))
+        return std::nullopt;
+    const vtkIdType pointId = picker->GetPointId();
+    auto *nodeIds = vtkTypeInt64Array::SafeDownCast(grid_->GetPointData()->GetArray("NodeIds"));
+    if (!nodeIds || pointId < 0 || pointId >= nodeIds->GetNumberOfValues())
+        return std::nullopt;
+
+    highlightNode(pointId);
+    return static_cast<MeshId>(nodeIds->GetValue(pointId));
+}
+
 void vtkScene::clearHighlight() {
     if (highlightActor_) {
         renderer_->RemoveActor(highlightActor_);
@@ -95,6 +116,28 @@ void vtkScene::highlightCell(vtkIdType cellId) {
     highlightActor_ = vtkSmartPointer<vtkActor>::New();
     highlightActor_->SetMapper(mapper);
     highlightActor_->GetProperty()->SetColor(1.0, 0.05, 0.0);
+    highlightActor_->PickableOff();
+    renderer_->AddActor(highlightActor_);
+}
+
+void vtkScene::highlightNode(vtkIdType pointId) {
+    double xyz[3];
+    grid_->GetPoint(pointId, xyz);
+    auto points = vtkSmartPointer<vtkPoints>::New();
+    points->SetDataTypeToDouble();
+    const vtkIdType markerPointId = points->InsertNextPoint(xyz);
+    auto marker = vtkSmartPointer<vtkUnstructuredGrid>::New();
+    marker->SetPoints(points);
+    marker->InsertNextCell(VTK_VERTEX, 1, &markerPointId);
+    auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
+    mapper->SetInputData(marker);
+    mapper->ScalarVisibilityOff();
+    vtkMapper::SetResolveCoincidentTopologyToPolygonOffset();
+    mapper->SetRelativeCoincidentTopologyPointOffsetParameter(-4.0);
+    highlightActor_ = vtkSmartPointer<vtkActor>::New();
+    highlightActor_->SetMapper(mapper);
+    highlightActor_->GetProperty()->SetColor(1.0, 0.05, 0.0);
+    highlightActor_->GetProperty()->SetPointSize(10.0);
     highlightActor_->PickableOff();
     renderer_->AddActor(highlightActor_);
 }

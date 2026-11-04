@@ -63,7 +63,10 @@ void MainWindow::setupCentral() {
         showElementInfo(elementId);
         logWidget_->appendPlainText(tr("选中单元：%1").arg(static_cast<qlonglong>(elementId)));
     });
-
+    connect(viewport_, &MeshViewport::nodePicked, this, [this](MeshId nodeId) {
+        showNodeInfo(nodeId);
+        logWidget_->appendPlainText(tr("选中节点：%1").arg(static_cast<qlonglong>(nodeId)));
+    });
     connect(viewport_, &MeshViewport::selectionCleared, this, [this]() {
         infoTable_->setRowCount(0);
         logWidget_->appendPlainText(tr("已取消选择"));
@@ -137,6 +140,28 @@ void MainWindow::showElementInfo(MeshId elementId) {
     infoTable_->resizeColumnToContents(1);
 }
 
+void MainWindow::showNodeInfo(MeshId nodeId) {
+    const auto &nodes = currentMesh_.nodes;
+    const auto it = std::find_if(nodes.begin(), nodes.end(),
+                                 [nodeId](const MeshNode &node) { return node.id == nodeId; });
+    if (it == nodes.end()) {
+        infoTable_->setRowCount(0);
+        return;
+    }
+    const QStringList labels = {tr("节点编号"), QStringLiteral("X"), QStringLiteral("Y"),
+                                QStringLiteral("Z")};
+    const auto &xyz = it->coordinates;
+    const QStringList values = {QString::number(static_cast<qlonglong>(it->id)),
+                                QString::number(xyz[0], 'g', 12), QString::number(xyz[1], 'g', 12),
+                                QString::number(xyz[2], 'g', 12)};
+    infoTable_->setRowCount(4);
+    for (int row = 0; row < 4; ++row) {
+        infoTable_->setItem(row, 0, new QTableWidgetItem(labels[row]));
+        infoTable_->setItem(row, 1, new QTableWidgetItem(values[row]));
+    }
+    infoTable_->resizeColumnsToContents();
+}
+
 void MainWindow::setupLogWidget() {
     logWidget_ = new QPlainTextEdit(this);
     logWidget_->setReadOnly(true);
@@ -155,6 +180,10 @@ void MainWindow::setupToolBar() {
 
     // 添加打开文件action到工具栏
     toolBar_->addAction(actOpen_);
+
+    auto *pickNodeAction = toolBar_->addAction(tr("选节点"));
+    pickNodeAction->setCheckable(true);
+    connect(pickNodeAction, &QAction::toggled, viewport_, &MeshViewport::setNodePickingEnabled);
 }
 
 void MainWindow::onOpenFile() {
