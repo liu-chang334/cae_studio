@@ -6,6 +6,7 @@
 #include <vtkSmartPointer.h>
 
 class QWidget;
+class QVariantAnimation;
 class vtkScene;
 class vtkUnstructuredGrid;
 class vtkOrientationMarkerWidget;
@@ -47,6 +48,13 @@ protected:
 
 private:
     QPoint pressPosition_;
+
+    /// @brief 导入动画
+    QVariantAnimation *importAnimation_ = nullptr;
+
+    /// @brief 边线呼吸动画
+    QVariantAnimation *edgeAnimation_ = nullptr;
+
     bool clickCandidate_ = false;
     bool nodePickingEnabled_ = false;
 

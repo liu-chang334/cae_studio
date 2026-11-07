@@ -1,4 +1,5 @@
 {
+  "hideComments.foldOnHide": true, // 隐藏注释时折叠注释
     // 配置c++格式化器
   "[cpp]": {
     "editor.defaultFormatter": "ms-vscode.cpptools", // 指定默认formatter
@@ -11,5 +12,5 @@
   "C_Cpp.formatting": "clangFormat",  // 指定格式化引擎
   "C_Cpp.clang_format_style": "file",  // 从.clang-format读取样式
 
-  "markdown.extension.toc.levels": "2..2" // 生成目录的标题级别
+  "markdown.extension.toc.levels": "2..2",  // 生成目录的标题级别
 }

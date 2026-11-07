@@ -27,6 +27,7 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS
 )
 find_package(VTK CONFIG REQUIRED COMPONENTS
   CommonCore
+  FiltersCore # 提取单元与网格边线
   GUISupportQt
   RenderingOpenGL2
   InteractionWidgets
@@ -57,6 +58,7 @@ target_link_libraries(CAEStudio PRIVATE
   VTK::RenderingOpenGL2
   VTK::InteractionWidgets
   VTK::RenderingAnnotation
+  VTK::FiltersCore # 链接单元与边线提取模块
 )
 
 # 检查生成平台

@@ -1,8 +1,11 @@
 #include "MeshViewport.h"
 #include "vtkScene.h"
 
+#include <algorithm>
+
 #include <QApplication>
 #include <QMouseEvent>
+#include <QVariantAnimation.h>
 
 #include <vtkAxesActor.h>
 #include <vtkGenericOpenGLRenderWindow.h>
@@ -22,9 +25,42 @@ MeshViewport::MeshViewport(QWidget *parent)
     orientationWidget_->SetViewport(0.80, 0.00, 1.00, 0.20);
     orientationWidget_->SetEnabled(1);
     orientationWidget_->InteractiveOff();
+
+    // 导入动画
+    importAnimation_ = new QVariantAnimation(this);
+    importAnimation_->setDuration(1800);
+    importAnimation_->setStartValue(0.0);
+    importAnimation_->setEndValue(1.0);
+    importAnimation_->setEasingCurve(QEasingCurve::InOutCubic);
+    connect(importAnimation_, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant &value) {
+                scene_->setMeshRevealProgress(value.toDouble());
+                renderWindow()->Render();
+            });
+
+    // 边线传播动画，相位匀速推进并无缝循环
+    edgeAnimation_ = new QVariantAnimation(this);
+    edgeAnimation_->setDuration(6000);
+    edgeAnimation_->setStartValue(0.0);
+    edgeAnimation_->setEndValue(1.0);
+    edgeAnimation_->setLoopCount(-1);
+    edgeAnimation_->setEasingCurve(QEasingCurve::Linear);
+    connect(edgeAnimation_, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        // 仅首次启动时用约 720 毫秒引入波纹，后续周期保持连续。
+        const double phase = value.toDouble();
+        const double ramp = edgeAnimation_->currentLoop() == 0
+            ? std::min(phase / 0.12, 1.0) : 1.0;
+        const double strength = ramp * ramp * (3.0 - 2.0 * ramp);
+        scene_->setEdgeWavePhase(phase, strength);
+        renderWindow()->Render();
+    });
+    connect(importAnimation_, &QVariantAnimation::finished, edgeAnimation_,
+            [this]() { edgeAnimation_->start(); });
 }
 
 MeshViewport::~MeshViewport() {
+    edgeAnimation_->stop();
+    importAnimation_->stop();
     orientationWidget_->SetEnabled(0);
     orientationWidget_->SetInteractor(nullptr);
     orientationWidget_ = nullptr;
@@ -34,11 +70,17 @@ MeshViewport::~MeshViewport() {
 void MeshViewport::setMesh(vtkUnstructuredGrid *grid) {
     if (!grid)
         return;
+    edgeAnimation_->stop();
+    importAnimation_->stop();
     scene_->setMesh(grid);
+    scene_->setMeshRevealProgress(0.0);
     renderWindow()->Render();
+    importAnimation_->start();
 }
 
 void MeshViewport::clear() {
+    edgeAnimation_->stop();
+    importAnimation_->stop();
     scene_->clear();
     renderWindow()->Render();
 }
@@ -49,6 +91,12 @@ void MeshViewport::resetCamera() {
 }
 
 void MeshViewport::mousePressEvent(QMouseEvent *event) {
+    if (importAnimation_->state() == QAbstractAnimation::Running) {
+        importAnimation_->stop();
+        scene_->setMeshRevealProgress(1.0);
+        edgeAnimation_->start();
+        renderWindow()->Render();
+    }
     if (event->button() == Qt::LeftButton) {
         pressPosition_ = event->position().toPoint();
         clickCandidate_ = true;
