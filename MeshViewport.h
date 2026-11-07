@@ -11,12 +11,21 @@ class vtkScene;
 class vtkUnstructuredGrid;
 class vtkOrientationMarkerWidget;
 
+/**
+ * @brief vtk视口
+ * @details 显示网格, 并提供交互功能
+ */
 class MeshViewport : public QVTKOpenGLNativeWidget {
     Q_OBJECT
 public:
     explicit MeshViewport(QWidget *parent = nullptr);
     ~MeshViewport() override;
 
+    /**
+     * @brief 添加网格
+     * @param grid 网格数据
+     * @details 显示网格, 并开始导入动画
+     */
     void setMesh(vtkUnstructuredGrid *grid);
     void clear();
     void resetCamera();
@@ -41,6 +50,19 @@ signals:
      */
     void selectionCleared();
 
+private:
+    /**
+     * @brief 更新导入进度
+     * @param value 导入进度值
+     */
+    void updateImportProgress(const QVariant &value);
+
+    /**
+     * @brief 更新边线传播进度
+     * @param value 边线传播进度值
+     */
+    void updateEdgeProgress(const QVariant &value);
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -52,7 +74,7 @@ private:
     /// @brief 导入动画
     QVariantAnimation *importAnimation_ = nullptr;
 
-    /// @brief 边线呼吸动画
+    /// @brief 边线传播动画
     QVariantAnimation *edgeAnimation_ = nullptr;
 
     bool clickCandidate_ = false;

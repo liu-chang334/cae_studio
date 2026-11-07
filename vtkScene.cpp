@@ -64,7 +64,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid) {
     renderer_->AddActor(meshActor_);
     // 4. 构建边线波纹对象
     buildEdgeWave();
-    // 5. 设置网格颜色渐变
+    // 5. 设置网格颜色渐变进度为0, 即不显示
     setMeshRevealProgress(0.0);
     // 6. 重置相机
     resetCamera();

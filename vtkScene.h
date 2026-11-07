@@ -27,6 +27,7 @@ public:
     /**
      * @brief 设置网格
      * @param grid 网格指针
+     * @details 显示网格, 并重置导入动画进度为0
      */
     void setMesh(vtkUnstructuredGrid *grid);
 
