@@ -27,7 +27,15 @@ public:
      * @details 显示网格, 并开始导入动画
      */
     void setMesh(vtkUnstructuredGrid *grid);
+
+    /**
+     * @brief 清除网格, 停止所有动画
+     */
     void clear();
+
+    /**
+     * @brief 重置相机, 刷新视图
+     */
     void resetCamera();
 
     void setNodePickingEnabled(bool enabled);
@@ -80,6 +88,8 @@ private:
     bool clickCandidate_ = false;
     bool nodePickingEnabled_ = false;
 
+    /// @brief vtk场景
     vtkScene *scene_ = nullptr;
+    /// @brief 坐标系
     vtkSmartPointer<vtkOrientationMarkerWidget> orientationWidget_ = nullptr;
 };

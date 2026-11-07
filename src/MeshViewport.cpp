@@ -148,7 +148,7 @@ void MeshViewport::updateImportProgress(const QVariant &value) {
 }
 
 void MeshViewport::updateEdgeProgress(const QVariant &value) {
-    const double phase = value.toDouble(); // 当前相位
+    const double phase = value.toDouble(); // 获取当前相位
     double ramp = 1.0;
     if (edgeAnimation_->currentLoop() == 0)
         ramp = std::min(phase / 0.12, 1.0);                   // 首轮幅度渐强

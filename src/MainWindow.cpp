@@ -16,7 +16,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setupCentral();
     // 初始化工具栏
     setupToolBar();
-
     // 初始窗口尺寸
     resize(1000, 700);
     // setMinimumSize(600, 400);
@@ -30,11 +29,9 @@ void MainWindow::setupModelPanel() {
     modelTree_->setHeaderLabels(headers);   // 设置表头
     modelTree_->setColumnWidth(0, 180);     // 设置第一列宽度
     modelTree_->setColumnWidth(1, 20);      // 设置第二列宽度
-
     // 创建根节点
     QTreeWidgetItem *root_item = new QTreeWidgetItem(modelTree_);
     root_item->setText(0, "Model-1");
-
     // 创建子节点
     nodeItem_ = new QTreeWidgetItem(root_item);
     nodeItem_->setText(0, "Node");
@@ -58,7 +55,6 @@ void MainWindow::setupModelPanel() {
 void MainWindow::setupCentral() {
     // 创建vtk渲染窗口
     viewport_ = new MeshViewport(this);
-
     connect(viewport_, &MeshViewport::elementPicked, this, [this](MeshId elementId) {
         showElementInfo(elementId);
         logWidget_->appendPlainText(tr("选中单元：%1").arg(static_cast<qlonglong>(elementId)));
@@ -71,7 +67,6 @@ void MainWindow::setupCentral() {
         infoTable_->setRowCount(0);
         logWidget_->appendPlainText(tr("已取消选择"));
     });
-
     // 创建右侧区域: vtk渲染窗口 + 日志窗口
     QSplitter *right = new QSplitter(Qt::Vertical, this);
     right->addWidget(viewport_);
@@ -79,7 +74,6 @@ void MainWindow::setupCentral() {
     right->setStretchFactor(0, 5);
     right->setStretchFactor(1, 2);
     right->setSizes({760, 190});
-
     // 创建左侧区域: 模型树 + 信息表格
     QSplitter *left = new QSplitter(Qt::Vertical, this);
     left->addWidget(modelTree_);
@@ -87,7 +81,6 @@ void MainWindow::setupCentral() {
     left->setStretchFactor(0, 5);
     left->setStretchFactor(1, 2);
     left->setSizes({760, 190});
-
     // 整体布局
     QSplitter *splitter = new QSplitter(this);
     splitter->addWidget(left);
@@ -171,13 +164,11 @@ void MainWindow::setupToolBar() {
     toolBar_ = addToolBar(tr("Main")); // 添加工具栏
     toolBar_->setMovable(false);       // 禁用用户拖动
     toolBar_->setFloatable(false);     // 禁用用户浮动
-
     // 创建打开文件action
     QAction *actOpen_ = new QAction(tr("Open File"), this);
     actOpen_->setShortcut(QKeySequence::Open);
     actOpen_->setStatusTip(tr("Open a mesh file"));
     connect(actOpen_, &QAction::triggered, this, &MainWindow::onOpenFile);
-
     // 添加打开文件action到工具栏
     toolBar_->addAction(actOpen_);
 
@@ -191,7 +182,6 @@ void MainWindow::onOpenFile() {
     const QString path = QFileDialog::getOpenFileName(this, tr("Open File"), QString(), filter);
     if (path.isEmpty())
         return;
-
     AbaqusInpReader reader;
     auto meshdata = reader.read(path);
     for (const auto &warning : meshdata.warnings)

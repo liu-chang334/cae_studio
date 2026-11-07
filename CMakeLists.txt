@@ -39,16 +39,23 @@ message(STATUS "VTK_DIR: ${VTK_DIR}")
 # 添加可执行文件
 add_executable(CAEStudio 
   main.cpp
-  MainWindow.cpp
-  vtkScene.cpp
-  MeshViewport.cpp
-  AbaqusInpReader.cpp
-  vtkBuilder.cpp
+  src/MainWindow.cpp
+  src/vtkScene.cpp
+  src/MeshViewport.cpp
+  src/AbaqusInpReader.cpp
+  src/vtkBuilder.cpp
 )
 
 # 添加头文件搜索路径
 target_include_directories(CAEStudio PRIVATE
-  ${CMAKE_SOURCE_DIR})
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+# 将含有 Q_OBJECT 的头文件加入目标，供 AUTOMOC 扫描
+target_sources(CAEStudio PRIVATE
+    include/MainWindow.h
+    include/MeshViewport.h
+)
 
 # 链接 Qt + VTK
 target_link_libraries(CAEStudio PRIVATE
