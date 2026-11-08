@@ -11,7 +11,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
         return result;
     }
     QTextStream in(&f);
-    enum Section { None, Node, ElementC3D8, NodeSet };
+    enum Section { None, Node, ElementC3D8, NodeSet, Load };
     Section sec = None;
     std::string currentNodeSetName; // 当前正在读取的节点集名称
     qint64 lineNumber = 0;          // 行号计数
@@ -69,6 +69,8 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 currentNodeSetName = setName.toStdString();
                 result.mesh.nodeSets.try_emplace(currentNodeSetName);
                 sec = NodeSet;
+            } else if (keyword == "*LOAD") {
+                sec = Load;
             }
             continue;
         }
@@ -148,12 +150,46 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 }
                 nodeIds.push_back(nid);
             }
+        } else if (sec == Load) {
+            auto loadParts = parts;
+            if (!loadParts.isEmpty() && loadParts.back().trimmed().isEmpty())
+                loadParts.removeLast();
+            if (loadParts.size() != 3) {
+                result.error =
+                    QStringLiteral("第 %1 行: 荷载应为 节点集名称, 方向, 力值. \n原文: %2")
+                        .arg(lineNumber)
+                        .arg(line);
+                return result;
+            }
+            const QString setName = loadParts[0].trimmed();
+            bool okDof = false;
+            bool okMagnitude = false;
+            const int dof = loadParts[1].trimmed().toInt(&okDof);
+            const double magnitude = loadParts[2].trimmed().toDouble(&okMagnitude);
+            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okMagnitude ||
+                !std::isfinite(magnitude)) {
+                result.error =
+                    QStringLiteral("第 %1 行: 荷载名称不能为空, 方向须为 1～3, 力值须为有限数值."
+                                   "\n原文: %2")
+                        .arg(lineNumber)
+                        .arg(line);
+                return result;
+            }
+            result.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
         }
     }
     f.close();
     if (result.mesh.nodes.empty() || result.mesh.elements.empty()) {
         result.error = QStringLiteral("未读取到有效网格.");
         return result;
+    }
+    for (const auto &load : result.loads) {
+        const auto it = result.mesh.nodeSets.find(load.nodeSetName);
+        if (it == result.mesh.nodeSets.end() || it->second.empty()) {
+            result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1")
+                               .arg(QString::fromStdString(load.nodeSetName));
+            return result;
+        }
     }
     return result;
 }

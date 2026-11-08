@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LoadData.h"
 #include "MeshData.h"
 
 #include <QFileDialog>
@@ -17,19 +18,27 @@ class MeshViewport;
  * @brief 程序主窗口
  */
 class MainWindow : public QMainWindow {
-    ///@brief 定义宏,使signal/slot机制生效
+    /**
+     * @brief 定义宏,使signal/slot机制生效
+     */
     Q_OBJECT
 
 public:
-    /// @brief 构造函数
-    /// @param parent 父窗口指针
+    /**
+     * @brief 构造函数
+     * @param parent 父窗口指针
+     */
     explicit MainWindow(QWidget *parent = nullptr);
 
-    /// @brief 析构函数
+    /**
+     * @brief 析构函数
+     */
     ~MainWindow() = default;
 
 private slots:
-    /// @brief 打开文件
+    /**
+     * @brief 打开文件槽函数
+     */
     void onOpenFile();
 
     /// @brief 切换线框模式
@@ -41,30 +50,46 @@ private slots:
     // void onToggleZoom(bool checked);
 
 private:
-    /// @brief 初始化工具栏
+    /**
+     * @brief 初始化工具栏
+     */
     void setupToolBar();
 
-    /// @brief 初始化中心区域
+    /**
+     * @brief 初始化中心区域
+     */
     void setupCentral();
 
-    /// @brief 初始化模型面板
+    /**
+     * @brief 初始化模型面板
+     */
     void setupModelPanel();
 
-    /// @brief 根据当前网格更新模型树
+    /**
+     * @brief 根据当前网格更新模型树
+     */
     void updateModelTree();
 
-    /// @brief 初始化信息表格
+    /**
+     * @brief 初始化信息表格
+     */
     void setupInfoTable();
 
-    /// @brief 在信息表格中显示选中单元信息
-    /// @param elementId 选中单元编号
+    /**
+     * @brief 在信息表格中显示选中单元信息
+     * @param elementId 选中单元编号
+     */
     void showElementInfo(MeshId elementId);
 
-    /// @brief 在信息表格中显示选中节点信息
-    /// @param nodeId 选中节点编号
+    /**
+     * @brief 在信息表格中显示选中节点信息
+     * @param nodeId 选中节点编号
+     */
     void showNodeInfo(MeshId nodeId);
 
-    /// @brief 初始化日志窗口
+    /**
+     * @brief 初始化日志窗口
+     */
     void setupLogWidget();
 
     /// @brief 初始化悬停选择
@@ -76,36 +101,66 @@ private:
     /// @brief 更新信息表格
     // void updateInfoTable();
 
-    /// @brief 显示网格
+    /**
+     * @brief 显示网格
+     */
     void showGrid();
 
 private:
-    /// @brief 模型树
+    /**
+     * @brief 模型树
+     */
     QTreeWidget *modelTree_ = nullptr;
 
-    ///@brief 节点统计条目
+    /**
+     * @brief 节点统计条目
+     */
     QTreeWidgetItem *nodeItem_ = nullptr;
 
-    ///@brief 单元统计条目
+    /**
+     * @brief 单元统计条目
+     */
     QTreeWidgetItem *elemItem_ = nullptr;
 
-    /// @brief 节点集父条目
+    /**
+     * @brief 节点集父条目
+     */
     QTreeWidgetItem *nsetItem_ = nullptr;
 
-    /// @brief 日志窗口
+    /**
+     * @brief 荷载父条目
+     */
+    QTreeWidgetItem *loadItem_ = nullptr;
+
+    /**
+     * @brief 日志窗口
+     */
     QPlainTextEdit *logWidget_ = nullptr;
 
-    /// @brief 信息表格
+    /**
+     * @brief 信息表格
+     */
     QTableWidget *infoTable_ = nullptr;
 
-    /// @brief 工具条
+    /**
+     * @brief 工具条
+     */
     QToolBar *toolBar_ = nullptr;
 
-    /// @brief 网格视口
-    /// @details 第1份数据, 用于vtk显示
+    /**
+     * @brief 网格视口
+     * @details 第1份数据, 用于vtk显示
+     */
     MeshViewport *viewport_ = nullptr;
 
-    /// @brief 当前网格数据
-    /// @details 第2份数据, 用于统计
+    /**
+     * @brief 当前网格数据
+     * @details 第2份数据, 用于统计
+     */
     MeshData currentMesh_;
+
+    /**
+     * @brief 当前荷载数据
+     */
+    std::vector<NodeSetLoad> currentLoads_;
 };

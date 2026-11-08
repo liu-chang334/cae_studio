@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "AbaqusInpReader.h"
+#include "LoadData.h"
+#include "MeshData.h"
 #include "MeshViewport.h"
 #include "vtkBuilder.h"
 
@@ -24,11 +26,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 void MainWindow::setupModelPanel() {
     /// 创建树控件, this为父对象
     modelTree_ = new QTreeWidget(this);
-    modelTree_->setColumnCount(2);          // 设置列数
-    QStringList headers = {"Type", "size"}; // 表头
-    modelTree_->setHeaderLabels(headers);   // 设置表头
-    modelTree_->setColumnWidth(0, 180);     // 设置第一列宽度
-    modelTree_->setColumnWidth(1, 20);      // 设置第二列宽度
+    modelTree_->setColumnCount(2);                       // 设置列数
+    QStringList headers = {tr("项目"), tr("数量 / 值")}; // 表头
+    modelTree_->setHeaderLabels(headers);                // 设置表头
+    modelTree_->setColumnWidth(0, 180);                  // 设置第一列宽度
+    modelTree_->setColumnWidth(1, 20);                   // 设置第二列宽度
     // 创建根节点
     QTreeWidgetItem *root_item = new QTreeWidgetItem(modelTree_);
     root_item->setText(0, "Model-1");
@@ -45,6 +47,8 @@ void MainWindow::setupModelPanel() {
     mat_item->setText(0, "Material");
     QTreeWidgetItem *bc_item = new QTreeWidgetItem(root_item);
     bc_item->setText(0, "Boundary");
+    loadItem_ = new QTreeWidgetItem(root_item);
+    loadItem_->setText(0, tr("Load"));
 
     modelTree_->expandAll();
     updateModelTree();
@@ -92,14 +96,27 @@ void MainWindow::updateModelTree() {
     nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodes.size())));
     elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.elements.size())));
     while (nsetItem_->childCount() > 0)
-        delete nsetItem_->takeChild(0);
+        delete nsetItem_->takeChild(0); // 删除旧模型节点集条目
+    while (loadItem_->childCount() > 0)
+        delete loadItem_->takeChild(0); // 删除旧模型荷载条目
     nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodeSets.size())));
+    loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentLoads_.size())));
     for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
         auto *setItem = new QTreeWidgetItem(nsetItem_);
         setItem->setText(0, QString::fromStdString(name));
         setItem->setText(1, QString::number(static_cast<qulonglong>(nodeIds.size())));
     }
+    for (int i = 0; i < currentLoads_.size(); ++i) {
+        auto &load = currentLoads_[i];
+        auto *item = new QTreeWidgetItem(loadItem_);
+        item->setText(0, tr(" %1, in %2")
+                             .arg(QString::fromStdString(load.nodeSetName))
+                             .arg(load.degreeOfFreedom));
+        item->setText(1, QString::number(load.magnitude, 'g', 12));
+        item->setToolTip(1, tr("节点集中每个节点的荷载值"));
+    }
     nsetItem_->setExpanded(true);
+    loadItem_->setExpanded(true);
     modelTree_->resizeColumnToContents(1);
 }
 
@@ -204,15 +221,23 @@ void MainWindow::onOpenFile() {
         return;
     }
     currentMesh_ = std::move(meshdata.mesh);
+    currentLoads_ = std::move(meshdata.loads);
     viewport_->setMesh(result.grid);
     updateModelTree();
     infoTable_->setRowCount(0);
+    // 加载成功打印日志
     logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元.")
                                     .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
                                     .arg(static_cast<qulonglong>(currentMesh_.elements.size())));
-    for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
-        logWidget_->appendPlainText(tr("节点集 %1: %2 个节点")
-                                        .arg(QString::fromStdString(name))
-                                        .arg(static_cast<qulonglong>(nodeIds.size())));
-    }
+    // for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
+    //     logWidget_->appendPlainText(tr("节点集 %1: %2 个节点")
+    //                                     .arg(QString::fromStdString(name))
+    //                                     .arg(static_cast<qulonglong>(nodeIds.size())));
+    // }
+    // for (const auto &load : currentLoads_) {
+    //     logWidget_->appendPlainText(tr("荷载: 节点集 %1, 方向 %2, 每节点力值 %3")
+    //                                     .arg(QString::fromStdString(load.nodeSetName))
+    //                                     .arg(load.degreeOfFreedom)
+    //                                     .arg(load.magnitude, 0, 'g', 12));
+    // }
 }

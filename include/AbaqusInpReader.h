@@ -1,4 +1,6 @@
 #pragma once
+
+#include "LoadData.h"
 #include "MeshData.h"
 
 #include <QString>
@@ -11,6 +13,8 @@
  */
 struct MeshReadResult {
     MeshData mesh;
+    std::vector<NodeSetLoad> loads;
+
     QString error;
     QStringList warnings;
 
