@@ -2,6 +2,7 @@
 
 #include "BoundaryData.h"
 #include "LoadData.h"
+#include "MaterialData.h"
 #include "MeshData.h"
 
 #include <QFileDialog>
@@ -139,6 +140,11 @@ private:
     QTreeWidgetItem *boundaryItem_ = nullptr;
 
     /**
+     * @brief 材料父条目
+     */
+    QTreeWidgetItem *materialItem_ = nullptr;
+
+    /**
      * @brief 日志窗口
      */
     QPlainTextEdit *logWidget_ = nullptr;
@@ -174,4 +180,9 @@ private:
      * @brief 当前指定位移边界条件
      */
     std::vector<NodeSetBoundary> currentBoundaries_;
+
+    /**
+     * @brief 当前材料数据
+     */
+    std::vector<MaterialData> currentMaterials_;
 };

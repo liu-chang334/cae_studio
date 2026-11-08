@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QTextStream>
 
-enum Section { None, Node, ElementC3D8, NodeSet, Load, Boundary };
+enum Section { None, Node, ElementC3D8, NodeSet, Load, Boundary, Elastic };
 
 MeshReadResult AbaqusInpReader::read(const QString &path) const {
     MeshReadResult result;
@@ -81,9 +81,17 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                     return result;
                 }
                 sec = Boundary;
+            } else if (keyword == "*MATERIAL") {
+                MaterialData material;
+                // fields[1] 为 " name=Material-1"  取等号右侧作为名称
+                material.name = fields[1].section('=', 1).trimmed().toStdString();
+                result.materials.push_back(std::move(material));
+            } else if (keyword == "*ELASTIC") {
+                sec = Elastic;
             }
             continue;
         }
+
         const auto parts = line.split(',', Qt::KeepEmptyParts); // 按逗号分隔
         if (sec == Node) {
             if (parts.size() < 4) {
@@ -211,6 +219,10 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 return result;
             }
             result.boundaries.push_back(NodeSetBoundary{setName.toStdString(), dof, displacement});
+        } else if (sec == Elastic) {
+            const double E = parts[0].trimmed().toDouble();
+            const double nu = parts[1].trimmed().toDouble();
+            result.materials.back().elastic = IsotropicElasticData{E, nu};
         }
     }
     f.close();

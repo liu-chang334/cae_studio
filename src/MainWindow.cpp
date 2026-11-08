@@ -43,8 +43,8 @@ void MainWindow::setupModelPanel() {
     nsetItem_->setText(0, "Nset");
     QTreeWidgetItem *elemset_item = new QTreeWidgetItem(root_item);
     elemset_item->setText(0, "Eset");
-    QTreeWidgetItem *mat_item = new QTreeWidgetItem(root_item);
-    mat_item->setText(0, "Material");
+    materialItem_ = new QTreeWidgetItem(root_item);
+    materialItem_->setText(0, tr("Material"));
     boundaryItem_ = new QTreeWidgetItem(root_item);
     boundaryItem_->setText(0, tr("Boundary"));
     loadItem_ = new QTreeWidgetItem(root_item);
@@ -101,9 +101,12 @@ void MainWindow::updateModelTree() {
         delete loadItem_->takeChild(0); // 删除旧模型荷载条目
     while (boundaryItem_->childCount() > 0)
         delete boundaryItem_->takeChild(0); // 删除旧模型边界条件条目
+    while (materialItem_->childCount() > 0)
+        delete materialItem_->takeChild(0); // 删除旧模型材料条目
     nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodeSets.size())));
     loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentLoads_.size())));
     boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentBoundaries_.size())));
+    materialItem_->setText(1, QString::number(static_cast<qulonglong>(currentMaterials_.size())));
     for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
         auto *setItem = new QTreeWidgetItem(nsetItem_);
         setItem->setText(0, QString::fromStdString(name));
@@ -126,9 +129,27 @@ void MainWindow::updateModelTree() {
         item->setText(1, QString::number(boundary.displacement, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的指定位移值"));
     }
+    for (const auto &material : currentMaterials_) {
+        auto *item = new QTreeWidgetItem(materialItem_);
+        item->setText(0, QString::fromStdString(material.name));
+        if (material.elastic) {
+            const auto &elastic = *material.elastic;
+            auto *elasticItem = new QTreeWidgetItem(item);
+            elasticItem->setText(0, tr("Elastic"));
+            auto *youngItem = new QTreeWidgetItem(elasticItem);
+            youngItem->setText(0, tr("E"));
+            youngItem->setText(1, QString::number(elastic.youngModulus, 'g', 12));
+            auto *poissonItem = new QTreeWidgetItem(elasticItem);
+            poissonItem->setText(0, tr("nu"));
+            poissonItem->setText(1, QString::number(elastic.poissonRatio, 'g', 12));
+            elasticItem->setExpanded(false);
+        }
+        item->setExpanded(true);
+    }
     nsetItem_->setExpanded(true);
     loadItem_->setExpanded(true);
     boundaryItem_->setExpanded(true);
+    materialItem_->setExpanded(true);
     modelTree_->resizeColumnToContents(1);
 }
 
@@ -235,13 +256,15 @@ void MainWindow::onOpenFile() {
     currentMesh_ = std::move(meshdata.mesh);
     currentLoads_ = std::move(meshdata.loads);
     currentBoundaries_ = std::move(meshdata.boundaries);
+    currentMaterials_ = std::move(meshdata.materials);
     viewport_->setMesh(result.grid);
     updateModelTree();
     infoTable_->setRowCount(0);
     // 加载成功打印日志
-    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元.")
+    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元, %3 种材料.")
                                     .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
-                                    .arg(static_cast<qulonglong>(currentMesh_.elements.size())));
+                                    .arg(static_cast<qulonglong>(currentMesh_.elements.size()))
+                                    .arg(static_cast<qulonglong>(currentMaterials_.size())));
     // for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
     //     logWidget_->appendPlainText(tr("节点集 %1: %2 个节点")
     //                                     .arg(QString::fromStdString(name))
@@ -258,5 +281,14 @@ void MainWindow::onOpenFile() {
     //                                     .arg(QString::fromStdString(boundary.nodeSetName))
     //                                     .arg(boundary.degreeOfFreedom)
     //                                     .arg(boundary.displacement, 0, 'g', 12));
+    // }
+    // for (const auto &material : currentMaterials_) {
+    //     logWidget_->appendPlainText(tr("材料: %1").arg(QString::fromStdString(material.name)));
+    //     if (material.elastic) {
+    //         const auto &elastic = *material.elastic;
+    //         logWidget_->appendPlainText(tr("  弹性参数: E=%1, nu=%2")
+    //                                         .arg(elastic.youngModulus, 0, 'g', 12)
+    //                                         .arg(elastic.poissonRatio, 0, 'g', 12));
+    //     }
     // }
 }

@@ -2,6 +2,7 @@
 
 #include "BoundaryData.h"
 #include "LoadData.h"
+#include "MaterialData.h"
 #include "MeshData.h"
 
 #include <QString>
@@ -16,6 +17,7 @@ struct MeshReadResult {
     MeshData mesh;
     std::vector<NodeSetLoad> loads;
     std::vector<NodeSetBoundary> boundaries;
+    std::vector<MaterialData> materials;
 
     QString error;
     QStringList warnings;
