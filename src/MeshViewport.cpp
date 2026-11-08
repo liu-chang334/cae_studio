@@ -8,8 +8,10 @@
 #include <QVariantAnimation.h>
 
 #include <vtkAxesActor.h>
+#include <vtkCaptionActor2D.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkOrientationMarkerWidget.h>
+#include <vtkTextProperty.h>
 
 MeshViewport::MeshViewport(QWidget *parent)
     : QVTKOpenGLNativeWidget(parent), scene_(new vtkScene()) {
@@ -18,6 +20,16 @@ MeshViewport::MeshViewport(QWidget *parent)
     window->AddRenderer(scene_->renderer());
     // 添加坐标轴
     auto axes = vtkSmartPointer<vtkAxesActor>::New();
+    // 获取三个轴标签的文字属性
+    auto *xText = axes->GetXAxisCaptionActor2D()->GetCaptionTextProperty();
+    auto *yText = axes->GetYAxisCaptionActor2D()->GetCaptionTextProperty();
+    auto *zText = axes->GetZAxisCaptionActor2D()->GetCaptionTextProperty();
+    xText->SetColor(0.0, 0.0, 0.0);
+    yText->SetColor(0.0, 0.0, 0.0);
+    zText->SetColor(0.0, 0.0, 0.0);
+    xText->ShadowOff();
+    yText->ShadowOff();
+    zText->ShadowOff();
     orientationWidget_ = vtkSmartPointer<vtkOrientationMarkerWidget>::New();
     orientationWidget_->SetOrientationMarker(axes);
     orientationWidget_->SetInteractor(interactor());

@@ -194,7 +194,7 @@ void vtkScene::setMeshRevealProgress(double progress) {
         return;
     const double t = std::clamp(progress, 0.0, 1.0);
     double startColor[3] = {255 / 255.0, 255 / 255.0, 255.0 / 255.0}; // rgb(255, 255, 255) 起始颜色
-    double surfColor[3] = {97 / 255.0, 136 / 255.0, 160 / 255.0};  // rgb(97, 136, 160)网格目标颜色
+    double surfColor[3] = {17 / 255.0, 128 / 255.0, 134 / 255.0};  // rgb(17, 128, 134)网格目标颜色
     double edgeColor[3] = {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0}; // rgb(0, 0, 0)边线目标颜色
     double surface[3];
     double edge[3];

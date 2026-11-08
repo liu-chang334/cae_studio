@@ -37,16 +37,14 @@ void MainWindow::setupModelPanel() {
     nodeItem_->setText(0, "Node");
     elemItem_ = new QTreeWidgetItem(root_item);
     elemItem_->setText(0, "Element");
-    QTreeWidgetItem *nset_item = new QTreeWidgetItem(root_item);
-    nset_item->setText(0, "Nset");
+    nsetItem_ = new QTreeWidgetItem(root_item);
+    nsetItem_->setText(0, "Nset");
     QTreeWidgetItem *elemset_item = new QTreeWidgetItem(root_item);
     elemset_item->setText(0, "Eset");
     QTreeWidgetItem *mat_item = new QTreeWidgetItem(root_item);
     mat_item->setText(0, "Material");
     QTreeWidgetItem *bc_item = new QTreeWidgetItem(root_item);
     bc_item->setText(0, "Boundary");
-    QTreeWidgetItem *job_item = new QTreeWidgetItem(root_item);
-    job_item->setText(0, "Job");
 
     modelTree_->expandAll();
     updateModelTree();
@@ -93,6 +91,15 @@ void MainWindow::setupCentral() {
 void MainWindow::updateModelTree() {
     nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodes.size())));
     elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.elements.size())));
+    while (nsetItem_->childCount() > 0)
+        delete nsetItem_->takeChild(0);
+    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodeSets.size())));
+    for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
+        auto *setItem = new QTreeWidgetItem(nsetItem_);
+        setItem->setText(0, QString::fromStdString(name));
+        setItem->setText(1, QString::number(static_cast<qulonglong>(nodeIds.size())));
+    }
+    nsetItem_->setExpanded(true);
     modelTree_->resizeColumnToContents(1);
 }
 
@@ -200,7 +207,12 @@ void MainWindow::onOpenFile() {
     viewport_->setMesh(result.grid);
     updateModelTree();
     infoTable_->setRowCount(0);
-    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点，%2 个单元.")
+    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元.")
                                     .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
                                     .arg(static_cast<qulonglong>(currentMesh_.elements.size())));
+    for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
+        logWidget_->appendPlainText(tr("节点集 %1: %2 个节点")
+                                        .arg(QString::fromStdString(name))
+                                        .arg(static_cast<qulonglong>(nodeIds.size())));
+    }
 }

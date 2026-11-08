@@ -89,6 +89,9 @@ private:
     ///@brief 单元统计条目
     QTreeWidgetItem *elemItem_ = nullptr;
 
+    /// @brief 节点集父条目
+    QTreeWidgetItem *nsetItem_ = nullptr;
+
     /// @brief 日志窗口
     QPlainTextEdit *logWidget_ = nullptr;
 
