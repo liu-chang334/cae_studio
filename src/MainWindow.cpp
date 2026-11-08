@@ -45,8 +45,8 @@ void MainWindow::setupModelPanel() {
     elemset_item->setText(0, "Eset");
     QTreeWidgetItem *mat_item = new QTreeWidgetItem(root_item);
     mat_item->setText(0, "Material");
-    QTreeWidgetItem *bc_item = new QTreeWidgetItem(root_item);
-    bc_item->setText(0, "Boundary");
+    boundaryItem_ = new QTreeWidgetItem(root_item);
+    boundaryItem_->setText(0, tr("Boundary"));
     loadItem_ = new QTreeWidgetItem(root_item);
     loadItem_->setText(0, tr("Load"));
 
@@ -99,8 +99,11 @@ void MainWindow::updateModelTree() {
         delete nsetItem_->takeChild(0); // 删除旧模型节点集条目
     while (loadItem_->childCount() > 0)
         delete loadItem_->takeChild(0); // 删除旧模型荷载条目
+    while (boundaryItem_->childCount() > 0)
+        delete boundaryItem_->takeChild(0); // 删除旧模型边界条件条目
     nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodeSets.size())));
     loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentLoads_.size())));
+    boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentBoundaries_.size())));
     for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
         auto *setItem = new QTreeWidgetItem(nsetItem_);
         setItem->setText(0, QString::fromStdString(name));
@@ -115,8 +118,17 @@ void MainWindow::updateModelTree() {
         item->setText(1, QString::number(load.magnitude, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的荷载值"));
     }
+    for (const auto &boundary : currentBoundaries_) {
+        auto *item = new QTreeWidgetItem(boundaryItem_);
+        item->setText(0, tr("%1, in %2")
+                             .arg(QString::fromStdString(boundary.nodeSetName))
+                             .arg(boundary.degreeOfFreedom));
+        item->setText(1, QString::number(boundary.displacement, 'g', 12));
+        item->setToolTip(1, tr("节点集中每个节点的指定位移值"));
+    }
     nsetItem_->setExpanded(true);
     loadItem_->setExpanded(true);
+    boundaryItem_->setExpanded(true);
     modelTree_->resizeColumnToContents(1);
 }
 
@@ -222,6 +234,7 @@ void MainWindow::onOpenFile() {
     }
     currentMesh_ = std::move(meshdata.mesh);
     currentLoads_ = std::move(meshdata.loads);
+    currentBoundaries_ = std::move(meshdata.boundaries);
     viewport_->setMesh(result.grid);
     updateModelTree();
     infoTable_->setRowCount(0);
@@ -239,5 +252,11 @@ void MainWindow::onOpenFile() {
     //                                     .arg(QString::fromStdString(load.nodeSetName))
     //                                     .arg(load.degreeOfFreedom)
     //                                     .arg(load.magnitude, 0, 'g', 12));
+    // }
+    // for (const auto &boundary : currentBoundaries_) {
+    //     logWidget_->appendPlainText(tr("边界条件: 节点集 %1, 自由度 %2, 指定位移 %3")
+    //                                     .arg(QString::fromStdString(boundary.nodeSetName))
+    //                                     .arg(boundary.degreeOfFreedom)
+    //                                     .arg(boundary.displacement, 0, 'g', 12));
     // }
 }

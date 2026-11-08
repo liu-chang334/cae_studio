@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BoundaryData.h"
 #include "LoadData.h"
 #include "MeshData.h"
 
@@ -133,6 +134,11 @@ private:
     QTreeWidgetItem *loadItem_ = nullptr;
 
     /**
+     * @brief 边界条件父条目
+     */
+    QTreeWidgetItem *boundaryItem_ = nullptr;
+
+    /**
      * @brief 日志窗口
      */
     QPlainTextEdit *logWidget_ = nullptr;
@@ -163,4 +169,9 @@ private:
      * @brief 当前荷载数据
      */
     std::vector<NodeSetLoad> currentLoads_;
+
+    /**
+     * @brief 当前指定位移边界条件
+     */
+    std::vector<NodeSetBoundary> currentBoundaries_;
 };

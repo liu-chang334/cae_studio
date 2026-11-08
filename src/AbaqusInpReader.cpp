@@ -1,7 +1,11 @@
 #include "AbaqusInpReader.h"
 
+#include <cmath>
+
 #include <QFile>
 #include <QTextStream>
+
+enum Section { None, Node, ElementC3D8, NodeSet, Load, Boundary };
 
 MeshReadResult AbaqusInpReader::read(const QString &path) const {
     MeshReadResult result;
@@ -11,7 +15,6 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
         return result;
     }
     QTextStream in(&f);
-    enum Section { None, Node, ElementC3D8, NodeSet, Load };
     Section sec = None;
     std::string currentNodeSetName; // 当前正在读取的节点集名称
     qint64 lineNumber = 0;          // 行号计数
@@ -71,6 +74,13 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 sec = NodeSet;
             } else if (keyword == "*LOAD") {
                 sec = Load;
+            } else if (keyword == "*BOUNDARY") {
+                if (fields.size() != 1) {
+                    result.error = QStringLiteral("第 %1 行: 当前暂不支持 *Boundary 的关键字参数.")
+                                       .arg(lineNumber);
+                    return result;
+                }
+                sec = Boundary;
             }
             continue;
         }
@@ -176,6 +186,31 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 return result;
             }
             result.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
+        } else if (sec == Boundary) {
+            auto boundaryParts = parts;
+            if (!boundaryParts.isEmpty() && boundaryParts.back().trimmed().isEmpty())
+                boundaryParts.removeLast();
+            if (boundaryParts.size() != 3) {
+                result.error = QStringLiteral("第 %1 行: 边界条件应为 节点集名称, 自由度, 指定位移."
+                                              "\n原文: %2")
+                                   .arg(lineNumber)
+                                   .arg(line);
+                return result;
+            }
+            const QString setName = boundaryParts[0].trimmed();
+            bool okDof = false;
+            bool okDisplacement = false;
+            const int dof = boundaryParts[1].trimmed().toInt(&okDof);
+            const double displacement = boundaryParts[2].trimmed().toDouble(&okDisplacement);
+            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okDisplacement ||
+                !std::isfinite(displacement)) {
+                result.error = QStringLiteral("第 %1 行: 节点集名称不能为空, 自由度须为 1～3,"
+                                              "位移须为有限数值. \n原文: %2")
+                                   .arg(lineNumber)
+                                   .arg(line);
+                return result;
+            }
+            result.boundaries.push_back(NodeSetBoundary{setName.toStdString(), dof, displacement});
         }
     }
     f.close();
@@ -188,6 +223,14 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
         if (it == result.mesh.nodeSets.end() || it->second.empty()) {
             result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1")
                                .arg(QString::fromStdString(load.nodeSetName));
+            return result;
+        }
+    }
+    for (const auto &boundary : result.boundaries) {
+        const auto it = result.mesh.nodeSets.find(boundary.nodeSetName);
+        if (it == result.mesh.nodeSets.end() || it->second.empty()) {
+            result.error = QStringLiteral("边界条件引用的节点集不存在或为空: %1")
+                               .arg(QString::fromStdString(boundary.nodeSetName));
             return result;
         }
     }

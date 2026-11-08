@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BoundaryData.h"
 #include "LoadData.h"
 #include "MeshData.h"
 
@@ -14,6 +15,7 @@
 struct MeshReadResult {
     MeshData mesh;
     std::vector<NodeSetLoad> loads;
+    std::vector<NodeSetBoundary> boundaries;
 
     QString error;
     QStringList warnings;
