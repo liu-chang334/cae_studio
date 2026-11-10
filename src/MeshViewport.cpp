@@ -13,8 +13,7 @@
 #include <vtkOrientationMarkerWidget.h>
 #include <vtkTextProperty.h>
 
-MeshViewport::MeshViewport(QWidget *parent)
-    : QVTKOpenGLNativeWidget(parent), scene_(new vtkScene()) {
+MeshViewport::MeshViewport(QWidget *parent) : QVTKOpenGLNativeWidget(parent), scene_(new vtkScene()) {
     auto window = vtkSmartPointer<vtkGenericOpenGLRenderWindow>::New();
     setRenderWindow(window);
     window->AddRenderer(scene_->renderer());
@@ -117,8 +116,7 @@ void MeshViewport::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() != Qt::LeftButton)
         return;
     const QPoint delta = event->position().toPoint() - pressPosition_;
-    const bool isClick =
-        clickCandidate_ && delta.manhattanLength() < QApplication::startDragDistance();
+    const bool isClick = clickCandidate_ && delta.manhattanLength() < QApplication::startDragDistance();
     clickCandidate_ = false;
     if (!isClick)
         return;

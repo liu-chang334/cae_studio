@@ -20,8 +20,7 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     nodeIds->SetNumberOfComponents(1);
     for (const auto &node : mesh.nodes) {
         if (id2pid.find(node.id) != id2pid.end()) {
-            result.error =
-                QStringLiteral("存在重复节点编号: %1").arg(static_cast<qlonglong>(node.id));
+            result.error = QStringLiteral("存在重复节点编号: %1").arg(static_cast<qlonglong>(node.id));
             return result;
         }
         const auto &xyz = node.coordinates;
@@ -36,8 +35,7 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     elementIds->SetNumberOfComponents(1);
     for (const auto &element : mesh.elements) {
         if (element.type != ElementType::Hex8 || element.nodeIds.size() != 8) {
-            result.error = QStringLiteral("单元 %1 的类型或节点数量无效")
-                               .arg(static_cast<qlonglong>(element.id));
+            result.error = QStringLiteral("单元 %1 的类型或节点数量无效").arg(static_cast<qlonglong>(element.id));
             return result;
         }
         vtkIdType conn[8];

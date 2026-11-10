@@ -6,8 +6,7 @@
 
 class C3D8Element : public SolidElement3D {
 public:
-    template <std::size_t Rows, std::size_t Cols>
-    using Matrix = std::array<std::array<double, Cols>, Rows>;
+    template <std::size_t Rows, std::size_t Cols> using Matrix = std::array<std::array<double, Cols>, Rows>;
 
     C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex);
 
@@ -15,8 +14,8 @@ public:
 
 private:
     /**
-     * @brief »ı·Öµã¼¸ºÎĞÅÏ¢
-     * @details °üº¬B¾ØÕó(Bbar)ºÍ»ı·ÖÌå»ıÒò×Ó(detJ x »ı·ÖÈ¨ÖØ)
+     * @brief ç§¯åˆ†ç‚¹å‡ ä½•ä¿¡æ¯
+     * @details åŒ…å«BçŸ©é˜µ(Bbar)å’Œç§¯åˆ†ä½“ç§¯å› å­(detJ x ç§¯åˆ†æƒé‡)
      */
     struct IntegrationPointGeometry {
         Matrix<6, 24> Bbar{};
@@ -24,58 +23,56 @@ private:
     };
 
     /**
-     * @brief ½Úµã×ø±ê
-     * @details ·µ»Øµ¥ÔªµÄ½Úµã×ø±ê¾ØÕó
+     * @brief è·å–èŠ‚ç‚¹åæ ‡çŸ©é˜µ
+     * @details è¿”å›å•å…ƒçš„èŠ‚ç‚¹åæ ‡çŸ©é˜µ
      */
     Matrix<8, 3> nodeCoordinates() const;
 
     /**
-     * @brief ĞÎº¯Êı¶Ô×ÔÈ»×ø±êµÄµ¼Êı
-     * @param naturalCoordinates ×ÔÈ»×ø±ê
-     * @return µ±Ç°»ı·Öµã´¦ĞÎº¯Êı¶Ô×ÔÈ»×ø±êµÄµ¼Êı¾ØÕó
-     * @details ¾²Ì¬·½·¨, ¿É²»ÊµÀı»¯µ÷ÓÃ
+     * @brief å½¢å‡½æ•°å¯¹è‡ªç„¶åæ ‡çš„å¯¼æ•°
+     * @param naturalCoordinates è‡ªç„¶åæ ‡
+     * @return å½“å‰ç§¯åˆ†ç‚¹å¤„å½¢å‡½æ•°å¯¹è‡ªç„¶åæ ‡çš„å¯¼æ•°çŸ©é˜µ
+     * @details é™æ€æ–¹æ³•, å¯ä¸å®ä¾‹åŒ–è°ƒç”¨
      */
-    static Matrix<3, 8>
-    computeShapeGradientsReference(const std::array<double, 3> &naturalCoordinates);
+    static Matrix<3, 8> computeShapeGradientsReference(const std::array<double, 3> &naturalCoordinates);
 
     /**
-     * @brief ÑÅ¿É±È¾ØÕó,
-     * @param referenceGradients ĞÎº¯Êı¶Ô×ÔÈ»×ø±êµÄµ¼Êı¾ØÕó
-     * @param coordinates ½Úµã×ø±ê¾ØÕó
-     * @return µ±Ç°»ı·Öµã´¦µÄÑÅ¿É±È¾ØÕó
-     * @details ¾²Ì¬·½·¨, ¿É²»ÊµÀı»¯µ÷ÓÃ
+     * @brief é›…å¯æ¯”çŸ©é˜µ,
+     * @param referenceGradients å½¢å‡½æ•°å¯¹è‡ªç„¶åæ ‡çš„å¯¼æ•°çŸ©é˜µ
+     * @param coordinates èŠ‚ç‚¹åæ ‡çŸ©é˜µ
+     * @return å½“å‰ç§¯åˆ†ç‚¹å¤„çš„é›…å¯æ¯”çŸ©é˜µ, ç¬¬iè¡Œæ˜¯ä¸‰ä¸ªç‰©ç†åæ ‡ä¾æ¬¡å¯¹ç¬¬iä¸ªè‡ªç„¶åæ ‡çš„åå¯¼
+     * @details é™æ€æ–¹æ³•, å¯ä¸å®ä¾‹åŒ–è°ƒç”¨
      */
-    static Matrix<3, 3> computeJacobian(const Matrix<3, 8> &referenceGradients,
-                                        const Matrix<8, 3> &coordinates);
+    static Matrix<3, 3> computeJacobian(const Matrix<3, 8> &referenceGradients, const Matrix<8, 3> &coordinates);
 
     /**
-     * @brief ĞÎº¯Êı¶ÔÎïÀí×ø±êµÄµ¼Êı
-     * @param referenceGradients ĞÎº¯Êı¶Ô×ÔÈ»×ø±êµÄµ¼Êı¾ØÕó
-     * @param jacobian ÑÅ¿É±È¾ØÕó
-     * @return µ±Ç°»ı·Öµã´¦ĞÎº¯Êı¶ÔÎïÀí×ø±êµÄµ¼Êı¾ØÕó
-     * @details ¾²Ì¬·½·¨, ¿É²»ÊµÀı»¯µ÷ÓÃ
+     * @brief å½¢å‡½æ•°å¯¹ç‰©ç†åæ ‡çš„å¯¼æ•°
+     * @param referenceGradients å½¢å‡½æ•°å¯¹è‡ªç„¶åæ ‡çš„å¯¼æ•°çŸ©é˜µ
+     * @param jacobian é›…å¯æ¯”çŸ©é˜µ
+     * @return å½“å‰ç§¯åˆ†ç‚¹å¤„å½¢å‡½æ•°å¯¹ç‰©ç†åæ ‡çš„å¯¼æ•°çŸ©é˜µ
+     * @details é™æ€æ–¹æ³•, å¯ä¸å®ä¾‹åŒ–è°ƒç”¨
      */
-    static Matrix<3, 8> computeShapeGradientsGlobal(const Matrix<3, 8> &referenceGradients,
-                                                    const Matrix<3, 3> &jacobian);
+    static Matrix<3, 8> computeShapeGradientsGlobal(const Matrix<3, 8> &referenceGradients, const Matrix<3, 3> &jacobian);
 
     /**
-     * @brief ¼ÆËãÓ¦±ä¾ØÕóB
-     * @param globalGradients ĞÎº¯Êı¶ÔÎïÀí×ø±êµÄµ¼Êı¾ØÕó
-     * @return µ±Ç°»ı·Öµã´¦µÄÓ¦±ä¾ØÕóB
-     * @details ¾²Ì¬·½·¨, ¿É²»ÊµÀı»¯µ÷ÓÃ
+     * @brief è®¡ç®—åº”å˜çŸ©é˜µB
+     * @param globalGradients å½¢å‡½æ•°å¯¹ç‰©ç†åæ ‡çš„å¯¼æ•°çŸ©é˜µ
+     * @return å½“å‰ç§¯åˆ†ç‚¹å¤„çš„åº”å˜çŸ©é˜µB
+     * @details é™æ€æ–¹æ³•, å¯ä¸å®ä¾‹åŒ–è°ƒç”¨
      */
     static Matrix<6, 24> computeB(const Matrix<3, 8> &globalGradients);
 
     /**
-     * @brief ¼ÆËãÓ¦±ä¾ØÕóBµÄÌå»ı²¿·Ö
+     * @brief è®¡ç®—åº”å˜çŸ©é˜µBçš„ä½“ç§¯éƒ¨åˆ†
      */
     static Matrix<6, 24> computeVolumetricB(const Matrix<6, 24> &B);
 
     /**
-     * @brief ³õÊ¼»¯¸÷»ı·ÖµãµÄBbar, »ı·ÖÒò×ÓºÍµ¥ÔªÌå»ı
+     * @brief åˆå§‹åŒ–å„ç§¯åˆ†ç‚¹çš„Bbar, ç§¯åˆ†å› å­å’Œå•å…ƒä½“ç§¯
      */
     void initializeGeometry();
 
+private:
     std::array<IntegrationPointGeometry, 8> geometry_{};
     double volume_ = 0.0;
 };

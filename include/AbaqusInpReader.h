@@ -22,9 +22,7 @@ struct MeshReadResult {
     QString error;
     QStringList warnings;
 
-    bool success() const {
-        return error.isEmpty() && !mesh.nodes.empty() && !mesh.elements.empty();
-    }
+    bool success() const { return error.isEmpty() && !mesh.nodes.empty() && !mesh.elements.empty(); }
 };
 
 /**

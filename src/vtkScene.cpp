@@ -97,13 +97,12 @@ std::optional<MeshId> vtkScene::pickElement(int x, int y) {
         return std::nullopt;
     // 3. 选择单元
     auto picker = vtkSmartPointer<vtkCellPicker>::New();
-    picker->AddPickList(meshActor_);              // 添加场景对象到选择列表
-    picker->PickFromListOn();                     // 仅从列表中选择
-    if (!picker->Pick(x, y, 0.0, renderer_))      // 选择单元
-        return std::nullopt;                      // 未选中单元
-    const vtkIdType cellId = picker->GetCellId(); // 选中的vtk内部索引
-    auto *elementIds = vtkTypeInt64Array::SafeDownCast(
-        grid_->GetCellData()->GetArray("ElementIds")); // 获取单元原始id数组
+    picker->AddPickList(meshActor_);                                                                  // 添加场景对象到选择列表
+    picker->PickFromListOn();                                                                         // 仅从列表中选择
+    if (!picker->Pick(x, y, 0.0, renderer_))                                                          // 选择单元
+        return std::nullopt;                                                                          // 未选中单元
+    const vtkIdType cellId = picker->GetCellId();                                                     // 选中的vtk内部索引
+    auto *elementIds = vtkTypeInt64Array::SafeDownCast(grid_->GetCellData()->GetArray("ElementIds")); // 获取单元原始id数组
     if (!elementIds || cellId < 0 || cellId >= elementIds->GetNumberOfValues())
         return std::nullopt;
     // 4. 高亮选中的单元
@@ -148,7 +147,7 @@ void vtkScene::highlightCell(vtkIdType cellId) {
     mapper->SetInputConnection(extract->GetOutputPort()); // 将extract提取结果交给mapper
     mapper->ScalarVisibilityOff();                        // 不显示标量场
     // 2. 设置深度偏移, 防止深度冲突
-    vtkMapper::SetResolveCoincidentTopologyToPolygonOffset(); // 启用Polygon-Offset模式
+    vtkMapper::SetResolveCoincidentTopologyToPolygonOffset();                // 启用Polygon-Offset模式
     mapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, -4.0); // 设置相对深度偏移
     // 3. 装填场景对象
     highlightActor_ = vtkSmartPointer<vtkActor>::New();
@@ -194,8 +193,8 @@ void vtkScene::setMeshRevealProgress(double progress) {
         return;
     const double t = std::clamp(progress, 0.0, 1.0);
     double startColor[3] = {255 / 255.0, 255 / 255.0, 255.0 / 255.0}; // rgb(255, 255, 255) 起始颜色
-    double surfColor[3] = {17 / 255.0, 128 / 255.0, 134 / 255.0};  // rgb(17, 128, 134)网格目标颜色
-    double edgeColor[3] = {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0}; // rgb(0, 0, 0)边线目标颜色
+    double surfColor[3] = {17 / 255.0, 128 / 255.0, 134 / 255.0};     // rgb(17, 128, 134)网格目标颜色
+    double edgeColor[3] = {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0};    // rgb(0, 0, 0)边线目标颜色
     double surface[3];
     double edge[3];
     // 1. 计算当前进度下的表面颜色和边线颜色
@@ -215,9 +214,8 @@ void vtkScene::setMeshRevealProgress(double progress) {
     if (edgeActor_) {
         edgeActor_->SetVisibility(true);
         edgeActor_->GetProperty()->SetColor(edge);
-        edgeWaveActor_->SetVisibility(t >= 1.0); // 导入完成后才显示波纹
-        edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf(
-            "waveStrength", 0.0f); // 把波纹强度归零
+        edgeWaveActor_->SetVisibility(t >= 1.0);                                                           // 导入完成后才显示波纹
+        edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf("waveStrength", 0.0f); // 把波纹强度归零
     }
 }
 
@@ -242,15 +240,13 @@ void vtkScene::buildEdgeWave() {
             double a[3], b[3];
             edges->GetPoint(ids[i - 1], a); // 根据点编号读取两个端点坐标
             edges->GetPoint(ids[i], b);
-            const double length =
-                std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); // 计算两个端点之间的距离
-            adjacency[ids[i - 1]].emplace_back(ids[i], length);    // 记录a->b
-            adjacency[ids[i]].emplace_back(ids[i - 1], length);    // 记录b->a
+            const double length = std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); // 计算两个端点之间的距离
+            adjacency[ids[i - 1]].emplace_back(ids[i], length);                      // 记录a->b
+            adjacency[ids[i]].emplace_back(ids[i - 1], length);                      // 记录b->a
         }
     }
     // 3. 计算每个点到所在部件波源的最短边线路径距离
-    std::vector<double> distance(static_cast<std::size_t>(count),
-                                 std::numeric_limits<double>::infinity());
+    std::vector<double> distance(static_cast<std::size_t>(count), std::numeric_limits<double>::infinity());
     using Visit = std::pair<double, vtkIdType>; // 到波源的距离, 点编号
     std::priority_queue<Visit, std::vector<Visit>, std::greater<Visit>> pending;
     for (vtkIdType source = 0; source < count; ++source) { // 每个部件选自己第一个点作为波源
@@ -288,8 +284,7 @@ void vtkScene::buildEdgeWave() {
     edgeActor_->VisibilityOff(); // 初始时隐藏, 后续由导入动画控制
     renderer_->AddActor(edgeActor_);
     // 5. 创建波纹actor
-    const int segments =
-        static_cast<int>(std::clamp<vtkIdType>(200000 / edges->GetNumberOfLines(), 2, 24));
+    const int segments = static_cast<int>(std::clamp<vtkIdType>(200000 / edges->GetNumberOfLines(), 2, 24));
     auto wavePoints = vtkSmartPointer<vtkPoints>::New();
     wavePoints->SetDataTypeToDouble();
     auto waveLines = vtkSmartPointer<vtkCellArray>::New();
@@ -310,21 +305,18 @@ void vtkScene::buildEdgeWave() {
             waveLines->InsertNextCell(segments + 1);
             for (int step = 0; step <= segments; ++step) {
                 const double t = static_cast<double>(step) / segments;
-                const vtkIdType point = wavePoints->InsertNextPoint(
-                    a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]));
+                const vtkIdType point =
+                    wavePoints->InsertNextPoint(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]));
                 waveLines->InsertCellPoint(point);
-                const double travel = std::min(distance[ids[i - 1]] + t * length,
-                                               distance[ids[i]] + (1.0 - t) * length);
+                const double travel = std::min(distance[ids[i - 1]] + t * length, distance[ids[i]] + (1.0 - t) * length);
                 waveDistances->InsertNextValue(maxDistance > 0.0 ? travel / maxDistance : 0.0);
-                waveCenters->InsertNextTuple3(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]),
-                                              a[2] + t * (b[2] - a[2]));
+                waveCenters->InsertNextTuple3(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]));
             }
         }
     }
     double bounds[6];
     grid_->GetBounds(bounds);
-    const double diagonal =
-        std::hypot(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4]);
+    const double diagonal = std::hypot(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4]);
     auto wave = vtkSmartPointer<vtkPolyData>::New();
     wave->SetPoints(wavePoints);
     wave->SetLines(waveLines);
@@ -341,10 +333,8 @@ void vtkScene::buildEdgeWave() {
     waveMapper->SetInputData(tube->GetOutput());
     waveMapper->ScalarVisibilityOff();
     waveMapper->SetVBOShiftScaleMethod(vtkPolyDataMapper::DISABLE_SHIFT_SCALE);
-    waveMapper->MapDataArrayToVertexAttribute("waveCenterMC", "EdgeWaveCenter",
-                                              vtkDataObject::FIELD_ASSOCIATION_POINTS, -1);
-    waveMapper->MapDataArrayToVertexAttribute("waveDistanceMC", "EdgeWaveDistance",
-                                              vtkDataObject::FIELD_ASSOCIATION_POINTS, -1);
+    waveMapper->MapDataArrayToVertexAttribute("waveCenterMC", "EdgeWaveCenter", vtkDataObject::FIELD_ASSOCIATION_POINTS, -1);
+    waveMapper->MapDataArrayToVertexAttribute("waveDistanceMC", "EdgeWaveDistance", vtkDataObject::FIELD_ASSOCIATION_POINTS, -1);
     edgeWaveActor_ = vtkSmartPointer<vtkActor>::New();
     edgeWaveActor_->SetMapper(waveMapper);
     edgeWaveActor_->GetProperty()->SetColor(0.0, 0.0, 0.0);
@@ -357,17 +347,16 @@ void vtkScene::buildEdgeWave() {
                                        "in vec3 waveCenterMC;\n"
                                        "in float waveDistanceMC;\n",
                                        false);
-    shader->AddVertexShaderReplacement(
-        "//VTK::PositionVC::Impl", true,
-        "float crest = 0.5 + 0.5 * cos(6.28318530718 * (2.0 * waveDistanceMC - wavePhase));\n"
-        "float sharpness = 0.5; // 越小波峰越宽\n"
-        "float radiusScale = waveStrength * (0.003 + 0.997 * pow(crest, sharpness));\n"
-        "vec4 waveVertexMC = vec4(waveCenterMC + (vertexMC.xyz - waveCenterMC) * radiusScale, "
-        "1.0);\n"
-        "#define vertexMC waveVertexMC\n"
-        "//VTK::PositionVC::Impl\n"
-        "#undef vertexMC\n",
-        false);
+    shader->AddVertexShaderReplacement("//VTK::PositionVC::Impl", true,
+                                       "float crest = 0.5 + 0.5 * cos(6.28318530718 * (2.0 * waveDistanceMC - wavePhase));\n"
+                                       "float sharpness = 0.5; // 越小波峰越宽\n"
+                                       "float radiusScale = waveStrength * (0.003 + 0.997 * pow(crest, sharpness));\n"
+                                       "vec4 waveVertexMC = vec4(waveCenterMC + (vertexMC.xyz - waveCenterMC) * radiusScale, "
+                                       "1.0);\n"
+                                       "#define vertexMC waveVertexMC\n"
+                                       "//VTK::PositionVC::Impl\n"
+                                       "#undef vertexMC\n",
+                                       false);
     edgeWaveActor_->PickableOff();   // 禁止此装饰性波纹参与拾取
     edgeWaveActor_->VisibilityOff(); // 初始时隐藏, 后续由导入动画控制
     renderer_->AddActor(edgeWaveActor_);
@@ -376,8 +365,7 @@ void vtkScene::buildEdgeWave() {
 void vtkScene::setEdgeWavePhase(double phase, double strength) {
     if (!edgeWaveActor_)
         return;
-    edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf(
-        "wavePhase", static_cast<float>(phase));
-    edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf(
-        "waveStrength", static_cast<float>(std::clamp(strength, 0.0, 1.0)));
+    edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf("wavePhase", static_cast<float>(phase));
+    edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf("waveStrength",
+                                                                                static_cast<float>(std::clamp(strength, 0.0, 1.0)));
 }

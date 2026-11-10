@@ -3,6 +3,7 @@
 #include "IntegrationPointState.h"
 #include "MeshData.h"
 
+#include <utility>
 #include <vector>
 
 class SolidElement3D {
@@ -49,9 +50,7 @@ public:
      * @brief 获取积分点状态
      * @return 积分点状态
      */
-    const std::vector<IntegrationPointState> &integrationPointStates() const {
-        return integrationPointStates_;
-    }
+    const std::vector<IntegrationPointState> &integrationPointStates() const { return integrationPointStates_; }
 
 protected:
     /**
@@ -61,10 +60,8 @@ protected:
      * @param materialIndex 材料数组中的0-based索引
      * @param integrationPointCount 积分点数量
      */
-    SolidElement3D(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex,
-                   std::size_t integrationPointCount)
-        : id_(id), nodes_(std::move(nodes)), materialIndex_(materialIndex),
-          integrationPointStates_(integrationPointCount) {}
+    SolidElement3D(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex, std::size_t integrationPointCount)
+        : id_(id), nodes_(std::move(nodes)), materialIndex_(materialIndex), integrationPointStates_(integrationPointCount) {}
 
     MeshId id_;
     std::vector<MeshNode> nodes_;

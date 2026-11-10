@@ -44,6 +44,7 @@ add_executable(CAEStudio
   src/MeshViewport.cpp
   src/AbaqusInpReader.cpp
   src/vtkBuilder.cpp
+  src/C3D8Element.cpp # C3D8单元几何计算实现
 )
 
 # 添加头文件搜索路径

@@ -26,8 +26,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
         if (line.startsWith("**"))
             continue; // 跳过注释行
         if (line.startsWith("*")) {
-            const auto fields =
-                line.split(',', Qt::KeepEmptyParts); // 将关键字与参数分开,如"*Nset", " nset=Set-1"
+            const auto fields = line.split(',', Qt::KeepEmptyParts); // 将关键字与参数分开,如"*Nset", " nset=Set-1"
             const QString keyword = fields[0].trimmed().toUpper();
             sec = None;
             currentNodeSetName.clear();
@@ -55,18 +54,12 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                     }
                 }
                 if (generate) {
-                    result.error =
-                        QStringLiteral("第 %1 行: 暂不支持节点集的 GENERATE 形式. \n原文: %2")
-                            .arg(lineNumber)
-                            .arg(line);
+                    result.error = QStringLiteral("第 %1 行: 暂不支持节点集的 GENERATE 形式. \n原文: %2").arg(lineNumber).arg(line);
                     return result;
                 }
                 if (setName.isEmpty()) {
                     result.error =
-                        QStringLiteral(
-                            "第 %1 行: 节点集缺少名称，应为 *Nset, nset=名称. \n原文: %2")
-                            .arg(lineNumber)
-                            .arg(line);
+                        QStringLiteral("第 %1 行: 节点集缺少名称，应为 *Nset, nset=名称. \n原文: %2").arg(lineNumber).arg(line);
                     return result;
                 }
                 currentNodeSetName = setName.toStdString();
@@ -76,8 +69,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 sec = Load;
             } else if (keyword == "*BOUNDARY") {
                 if (fields.size() != 1) {
-                    result.error = QStringLiteral("第 %1 行: 当前暂不支持 *Boundary 的关键字参数.")
-                                       .arg(lineNumber);
+                    result.error = QStringLiteral("第 %1 行: 当前暂不支持 *Boundary 的关键字参数.").arg(lineNumber);
                     return result;
                 }
                 sec = Boundary;
@@ -95,10 +87,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
         const auto parts = line.split(',', Qt::KeepEmptyParts); // 按逗号分隔
         if (sec == Node) {
             if (parts.size() < 4) {
-                result.error =
-                    QStringLiteral("第 %1 行: 节点数据字段不足, 应为 nid, x, y, z. \n原文: %2")
-                        .arg(lineNumber)
-                        .arg(line);
+                result.error = QStringLiteral("第 %1 行: 节点数据字段不足, 应为 nid, x, y, z. \n原文: %2").arg(lineNumber).arg(line);
                 return result;
             }
             bool okId = false, okx = false, oky = false, okz = false;
@@ -107,28 +96,22 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             double y = parts[2].trimmed().toDouble(&oky);
             double z = parts[3].trimmed().toDouble(&okz);
             if (!okId || !okx || !oky || !okz) {
-                result.error = QStringLiteral("第 %1 行: 节点编号或坐标无法转换为数值. \n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
+                result.error = QStringLiteral("第 %1 行: 节点编号或坐标无法转换为数值. \n原文: %2").arg(lineNumber).arg(line);
                 return result;
             }
             result.mesh.nodes.push_back(MeshNode{nid, {x, y, z}}); // 添加节点
         } else if (sec == ElementC3D8) {
             if (parts.size() < 9) {
-                result.error =
-                    QStringLiteral(
-                        "第 %1 行: C3D8单元数据字段不足,"
-                        "应为 eid, nid1, nid2, nid3, nid4, nid5, nid6, nid7, nid8. \n原文: %2")
-                        .arg(lineNumber)
-                        .arg(line);
+                result.error = QStringLiteral("第 %1 行: C3D8单元数据字段不足,"
+                                              "应为 eid, nid1, nid2, nid3, nid4, nid5, nid6, nid7, nid8. \n原文: %2")
+                                   .arg(lineNumber)
+                                   .arg(line);
                 return result;
             }
             bool ok = false;
             MeshId eid = parts[0].trimmed().toLongLong(&ok);
             if (!ok) {
-                result.error = QStringLiteral("第 %1 行: 单元编号无法转换为整数. \n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
+                result.error = QStringLiteral("第 %1 行: 单元编号无法转换为整数. \n原文: %2").arg(lineNumber).arg(line);
                 return result;
             }
             MeshElement element;
@@ -173,10 +156,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             if (!loadParts.isEmpty() && loadParts.back().trimmed().isEmpty())
                 loadParts.removeLast();
             if (loadParts.size() != 3) {
-                result.error =
-                    QStringLiteral("第 %1 行: 荷载应为 节点集名称, 方向, 力值. \n原文: %2")
-                        .arg(lineNumber)
-                        .arg(line);
+                result.error = QStringLiteral("第 %1 行: 荷载应为 节点集名称, 方向, 力值. \n原文: %2").arg(lineNumber).arg(line);
                 return result;
             }
             const QString setName = loadParts[0].trimmed();
@@ -184,13 +164,11 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             bool okMagnitude = false;
             const int dof = loadParts[1].trimmed().toInt(&okDof);
             const double magnitude = loadParts[2].trimmed().toDouble(&okMagnitude);
-            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okMagnitude ||
-                !std::isfinite(magnitude)) {
-                result.error =
-                    QStringLiteral("第 %1 行: 荷载名称不能为空, 方向须为 1～3, 力值须为有限数值."
-                                   "\n原文: %2")
-                        .arg(lineNumber)
-                        .arg(line);
+            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okMagnitude || !std::isfinite(magnitude)) {
+                result.error = QStringLiteral("第 %1 行: 荷载名称不能为空, 方向须为 1～3, 力值须为有限数值."
+                                              "\n原文: %2")
+                                   .arg(lineNumber)
+                                   .arg(line);
                 return result;
             }
             result.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
@@ -210,8 +188,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             bool okDisplacement = false;
             const int dof = boundaryParts[1].trimmed().toInt(&okDof);
             const double displacement = boundaryParts[2].trimmed().toDouble(&okDisplacement);
-            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okDisplacement ||
-                !std::isfinite(displacement)) {
+            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okDisplacement || !std::isfinite(displacement)) {
                 result.error = QStringLiteral("第 %1 行: 节点集名称不能为空, 自由度须为 1～3,"
                                               "位移须为有限数值. \n原文: %2")
                                    .arg(lineNumber)
@@ -233,16 +210,14 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
     for (const auto &load : result.loads) {
         const auto it = result.mesh.nodeSets.find(load.nodeSetName);
         if (it == result.mesh.nodeSets.end() || it->second.empty()) {
-            result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1")
-                               .arg(QString::fromStdString(load.nodeSetName));
+            result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1").arg(QString::fromStdString(load.nodeSetName));
             return result;
         }
     }
     for (const auto &boundary : result.boundaries) {
         const auto it = result.mesh.nodeSets.find(boundary.nodeSetName);
         if (it == result.mesh.nodeSets.end() || it->second.empty()) {
-            result.error = QStringLiteral("边界条件引用的节点集不存在或为空: %1")
-                               .arg(QString::fromStdString(boundary.nodeSetName));
+            result.error = QStringLiteral("边界条件引用的节点集不存在或为空: %1").arg(QString::fromStdString(boundary.nodeSetName));
             return result;
         }
     }

@@ -115,17 +115,13 @@ void MainWindow::updateModelTree() {
     for (int i = 0; i < currentLoads_.size(); ++i) {
         auto &load = currentLoads_[i];
         auto *item = new QTreeWidgetItem(loadItem_);
-        item->setText(0, tr(" %1, in %2")
-                             .arg(QString::fromStdString(load.nodeSetName))
-                             .arg(load.degreeOfFreedom));
+        item->setText(0, tr(" %1, in %2").arg(QString::fromStdString(load.nodeSetName)).arg(load.degreeOfFreedom));
         item->setText(1, QString::number(load.magnitude, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的荷载值"));
     }
     for (const auto &boundary : currentBoundaries_) {
         auto *item = new QTreeWidgetItem(boundaryItem_);
-        item->setText(0, tr("%1, in %2")
-                             .arg(QString::fromStdString(boundary.nodeSetName))
-                             .arg(boundary.degreeOfFreedom));
+        item->setText(0, tr("%1, in %2").arg(QString::fromStdString(boundary.nodeSetName)).arg(boundary.degreeOfFreedom));
         item->setText(1, QString::number(boundary.displacement, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的指定位移值"));
     }
@@ -162,8 +158,7 @@ void MainWindow::setupInfoTable() {
 void MainWindow::showElementInfo(MeshId elementId) {
     const auto &elements = currentMesh_.elements;
     const auto it =
-        std::find_if(elements.begin(), elements.end(),
-                     [elementId](const MeshElement &element) { return element.id == elementId; });
+        std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) { return element.id == elementId; });
     if (it == elements.end()) {
         infoTable_->setRowCount(0);
         return;
@@ -180,8 +175,7 @@ void MainWindow::showElementInfo(MeshId elementId) {
     }
     infoTable_->setRowCount(3);
     infoTable_->setItem(0, 0, new QTableWidgetItem(tr("单元编号")));
-    infoTable_->setItem(0, 1,
-                        new QTableWidgetItem(QString::number(static_cast<qlonglong>(element.id))));
+    infoTable_->setItem(0, 1, new QTableWidgetItem(QString::number(static_cast<qlonglong>(element.id))));
     infoTable_->setItem(1, 0, new QTableWidgetItem(tr("单元类型")));
     infoTable_->setItem(1, 1, new QTableWidgetItem(typeName));
     infoTable_->setItem(2, 0, new QTableWidgetItem(tr("拓扑节点")));
@@ -192,18 +186,15 @@ void MainWindow::showElementInfo(MeshId elementId) {
 
 void MainWindow::showNodeInfo(MeshId nodeId) {
     const auto &nodes = currentMesh_.nodes;
-    const auto it = std::find_if(nodes.begin(), nodes.end(),
-                                 [nodeId](const MeshNode &node) { return node.id == nodeId; });
+    const auto it = std::find_if(nodes.begin(), nodes.end(), [nodeId](const MeshNode &node) { return node.id == nodeId; });
     if (it == nodes.end()) {
         infoTable_->setRowCount(0);
         return;
     }
-    const QStringList labels = {tr("节点编号"), QStringLiteral("X"), QStringLiteral("Y"),
-                                QStringLiteral("Z")};
+    const QStringList labels = {tr("节点编号"), QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("Z")};
     const auto &xyz = it->coordinates;
-    const QStringList values = {QString::number(static_cast<qlonglong>(it->id)),
-                                QString::number(xyz[0], 'g', 12), QString::number(xyz[1], 'g', 12),
-                                QString::number(xyz[2], 'g', 12)};
+    const QStringList values = {QString::number(static_cast<qlonglong>(it->id)), QString::number(xyz[0], 'g', 12),
+                                QString::number(xyz[1], 'g', 12), QString::number(xyz[2], 'g', 12)};
     infoTable_->setRowCount(4);
     for (int row = 0; row < 4; ++row) {
         infoTable_->setItem(row, 0, new QTableWidgetItem(labels[row]));
