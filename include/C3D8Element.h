@@ -1,13 +1,12 @@
 #pragma once
 
+#include "Matrix.h"
 #include "SolidElement3D.h"
 
 #include <array>
 
 class C3D8Element : public SolidElement3D {
 public:
-    template <std::size_t Rows, std::size_t Cols> using Matrix = std::array<std::array<double, Cols>, Rows>;
-
     C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex);
 
     double volume() const { return volume_; }
@@ -18,7 +17,7 @@ private:
      * @details 包含B矩阵(Bbar)和积分体积因子(detJ x 积分权重)
      */
     struct IntegrationPointGeometry {
-        Matrix<6, 24> Bbar{};
+        linalg::Matrix<6, 24> Bbar{};
         double integrationFactor = 0.0;
     };
 
@@ -26,7 +25,7 @@ private:
      * @brief 获取节点坐标矩阵
      * @details 返回单元的节点坐标矩阵
      */
-    Matrix<8, 3> nodeCoordinates() const;
+    linalg::Matrix<8, 3> nodeCoordinates() const;
 
     /**
      * @brief 形函数对自然坐标的导数
@@ -34,7 +33,7 @@ private:
      * @return 当前积分点处形函数对自然坐标的导数矩阵
      * @details 静态方法, 可不实例化调用
      */
-    static Matrix<3, 8> computeShapeGradientsReference(const std::array<double, 3> &naturalCoordinates);
+    static linalg::Matrix<3, 8> computeShapeGradientsReference(const linalg::Vector<3> &naturalCoordinates);
 
     /**
      * @brief 雅可比矩阵,
@@ -43,7 +42,8 @@ private:
      * @return 当前积分点处的雅可比矩阵, 第i行是三个物理坐标依次对第i个自然坐标的偏导
      * @details 静态方法, 可不实例化调用
      */
-    static Matrix<3, 3> computeJacobian(const Matrix<3, 8> &referenceGradients, const Matrix<8, 3> &coordinates);
+    static linalg::Matrix<3, 3> computeJacobian(const linalg::Matrix<3, 8> &referenceGradients,
+                                                const linalg::Matrix<8, 3> &coordinates);
 
     /**
      * @brief 形函数对物理坐标的导数
@@ -52,7 +52,8 @@ private:
      * @return 当前积分点处形函数对物理坐标的导数矩阵
      * @details 静态方法, 可不实例化调用
      */
-    static Matrix<3, 8> computeShapeGradientsGlobal(const Matrix<3, 8> &referenceGradients, const Matrix<3, 3> &jacobian);
+    static linalg::Matrix<3, 8> computeShapeGradientsGlobal(const linalg::Matrix<3, 8> &referenceGradients,
+                                                            const linalg::Matrix<3, 3> &jacobian);
 
     /**
      * @brief 计算应变矩阵B
@@ -60,12 +61,12 @@ private:
      * @return 当前积分点处的应变矩阵B
      * @details 静态方法, 可不实例化调用
      */
-    static Matrix<6, 24> computeB(const Matrix<3, 8> &globalGradients);
+    static linalg::Matrix<6, 24> computeB(const linalg::Matrix<3, 8> &globalGradients);
 
     /**
      * @brief 计算应变矩阵B的体积部分
      */
-    static Matrix<6, 24> computeVolumetricB(const Matrix<6, 24> &B);
+    static linalg::Matrix<6, 24> computeVolumetricB(const linalg::Matrix<6, 24> &B);
 
     /**
      * @brief 初始化各积分点的Bbar, 积分因子和单元体积
