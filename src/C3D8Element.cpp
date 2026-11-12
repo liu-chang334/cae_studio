@@ -1,11 +1,14 @@
 #include "C3D8Element.h"
-#include "MatrixMath.h"
+#include "Matrix.h"
 
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 C3D8Element::C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex)
     : SolidElement3D(id, std::move(nodes), materialIndex, 8) {
-    initializeGeometry(); // 初始化各积分点的Bbar, 积分因子和单元体积
+    // 初始化各积分点的Bbar, 积分因子和单元体积
+    initializeGeometry();
 }
 
 linalg::Matrix<8, 3> C3D8Element::nodeCoordinates() const {
@@ -37,13 +40,7 @@ linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsReference(const linalg::V
 
 linalg::Matrix<3, 3> C3D8Element::computeJacobian(const linalg::Matrix<3, 8> &referenceGradients,
                                                   const linalg::Matrix<8, 3> &coordinates) {
-    linalg::Matrix<3, 3> jacobian{};
-    for (int i = 0; i < 3; ++i) {     // 第i行是三个物理坐标依次对第i个自然坐标的偏导
-        for (int j = 0; j < 3; ++j) { // 第j列是第j个物理坐标依次对三个自然坐标的偏导
-            for (int a = 0; a < 8; ++a)
-                jacobian[i][j] += referenceGradients[i][a] * coordinates[a][j];
-        }
-    }
+    linalg::Matrix<3, 3> jacobian = linalg::multiply(referenceGradients, coordinates);
     // [ dx/dr  dy/dr  dz/dr ]
     // [ dx/ds  dy/ds  dz/ds ]
     // [ dx/dt  dy/dt  dz/dt ]
@@ -53,13 +50,7 @@ linalg::Matrix<3, 3> C3D8Element::computeJacobian(const linalg::Matrix<3, 8> &re
 linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsGlobal(const linalg::Matrix<3, 8> &referenceGradients,
                                                               const linalg::Matrix<3, 3> &jacobian) {
     const auto inverseJacobian = linalg::inverse(jacobian);
-    linalg::Matrix<3, 8> globalGradients{};
-    for (int physical = 0; physical < 3; ++physical) {
-        for (int node = 0; node < 8; ++node) {
-            for (int natural = 0; natural < 3; ++natural)
-                globalGradients[physical][node] += inverseJacobian[physical][natural] * referenceGradients[natural][node];
-        }
-    }
+    linalg::Matrix<3, 8> globalGradients = linalg::multiply(inverseJacobian, referenceGradients);
     return globalGradients;
 }
 
@@ -106,14 +97,19 @@ void C3D8Element::initializeGeometry() {
     linalg::Matrix<6, 24> averageBvol{};
     // 01. 保存B-Bvol, 累计Bvol的体积积分
     for (std::size_t gp = 0; gp < gaussPoints.size(); ++gp) {
-        const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]);        // 对自然坐标偏导
-        const auto jacobian = computeJacobian(referenceGradients, coordinates);                 // 雅可比矩阵
+        const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]); // 对自然坐标偏导
+        const auto jacobian = computeJacobian(referenceGradients, coordinates);          // 雅可比矩阵
+        const double detJ = linalg::determinant(jacobian);
+        // 02. 检查雅可比矩阵是否退化
+        if (!std::isfinite(detJ) || detJ <= 0.0)
+            throw std::domain_error("C3D8 element " + std::to_string(id()) + ", Gauss point " + std::to_string(gp + 1) +
+                                    ": detJ must be finite and positive");
         const auto globalGradients = computeShapeGradientsGlobal(referenceGradients, jacobian); // 对物理坐标偏导
         const auto B = computeB(globalGradients);                                               // 组装应变矩阵B
         const auto Bvol = computeVolumetricB(B);                                                // 组装体积应变矩阵
         auto &point = geometry_[gp];
-        point.integrationFactor = linalg::determinant(jacobian) * weight; // 体积积分因子
-        volume_ += point.integrationFactor;                               // 单元体积
+        point.integrationFactor = detJ * weight; // 体积积分因子
+        volume_ += point.integrationFactor;      // 单元体积
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col) {
                 point.Bbar[row][col] = B[row][col] - Bvol[row][col];
@@ -121,16 +117,32 @@ void C3D8Element::initializeGeometry() {
             }
         }
     }
-    // 02. 体积积分除以单元体积, 得到单元平均体积项
+    // 03. 体积积分除以单元体积, 得到单元平均体积项
     for (auto &row : averageBvol) {
         for (double &value : row)
             value /= volume_;
     }
-    // 03. 每个积分点加上单元平均体积项
+    // 04. 每个积分点加上单元平均体积项
     for (auto &point : geometry_) {
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col)
                 point.Bbar[row][col] += averageBvol[row][col];
         }
     }
+}
+
+linalg::Matrix<24, 24> C3D8Element::computeElasticStiffness(const linalg::Matrix<6, 6> &D) const {
+    linalg::Matrix<24, 24> ke{};
+    for (const auto &point : geometry_) {
+        const auto &Bbar = point.Bbar;
+        // (6×6) × (6×24) → 6×24
+        const auto DB = linalg::multiply(D, Bbar);                                 // 6×24
+        const auto pointStiffness = linalg::multiply(linalg::transpose(Bbar), DB); // 24×24
+        for (std::size_t row = 0; row < ke.size(); ++row) {
+            for (std::size_t col = 0; col < ke[row].size(); ++col) {
+                ke[row][col] += pointStiffness[row][col] * point.integrationFactor;
+            }
+        }
+    }
+    return ke;
 }

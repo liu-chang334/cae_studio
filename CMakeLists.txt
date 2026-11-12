@@ -37,7 +37,7 @@ message(STATUS "Qt6_DIR: ${Qt6_DIR}")
 message(STATUS "VTK_DIR: ${VTK_DIR}")
 
 # 将公共矩阵运算编译成静态库
-add_library(CAEMath STATIC src/MatrixMath.cpp)
+add_library(CAEMath STATIC src/Matrix.cpp)
 
 # 让CAEMath及链接它的目标能找到公开头文件
 target_include_directories(CAEMath PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -45,7 +45,10 @@ target_include_directories(CAEMath PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 # 数学库关闭该目标的AUTOMOC
 set_target_properties(CAEMath PROPERTIES AUTOMOC OFF)
 
-# 添加可执行文件
+# 添加cmake子目录
+add_subdirectory(test)
+
+# 添加可执行文件(主程序)
 add_executable(CAEStudio 
   main.cpp
   src/MainWindow.cpp
@@ -54,6 +57,7 @@ add_executable(CAEStudio
   src/AbaqusInpReader.cpp
   src/vtkBuilder.cpp
   src/C3D8Element.cpp # C3D8单元几何计算实现
+  src/LinearElastic.cpp # 线性弹性材料实现
 )
 
 # 添加头文件搜索路径

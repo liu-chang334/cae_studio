@@ -7,9 +7,26 @@
 
 class C3D8Element : public SolidElement3D {
 public:
+    /**
+     * @brief 构造函数
+     * @param id 单元ID
+     * @param nodes 节点列表
+     * @param materialIndex 材料索引
+     */
     C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex);
 
+    /**
+     * @brief 获取单元体积
+     * @return 单元体积
+     */
     double volume() const { return volume_; }
+
+    /**
+     * @brief 计算单元的弹性刚度矩阵
+     * @param D 弹性本构矩阵
+     * @return 单元的弹性刚度矩阵
+     */
+    linalg::Matrix<24, 24> computeElasticStiffness(const linalg::Matrix<6, 6> &D) const;
 
 private:
     /**
