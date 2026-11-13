@@ -33,23 +33,40 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     auto elementIds = vtkSmartPointer<vtkTypeInt64Array>::New();
     elementIds->SetName("ElementIds");
     elementIds->SetNumberOfComponents(1);
+    std::vector<vtkIdType> conn;
     for (const auto &element : mesh.elements) {
-        if (element.type != ElementType::Hex8 || element.nodeIds.size() != 8) {
-            result.error = QStringLiteral("单元 %1 的类型或节点数量无效").arg(static_cast<qlonglong>(element.id));
+        int vtkCellType = VTK_EMPTY_CELL;
+        std::size_t expectedNodeCount = 0;
+        switch (element.topology) {
+        case CellTopology::HEXAHEDRON:
+            vtkCellType = VTK_HEXAHEDRON;
+            expectedNodeCount = 8;
+            break;
+        default:
+            result.error = QStringLiteral("单元 %1 的拓扑类型暂不支持显示（类型值 %2）")
+                               .arg(static_cast<qlonglong>(element.id))
+                               .arg(static_cast<int>(element.topology));
             return result;
         }
-        vtkIdType conn[8];
-        for (int i = 0; i < 8; ++i) {
-            auto it = id2pid.find(element.nodeIds[i]);
+        if (element.nodeIds.size() != expectedNodeCount) {
+            result.error = QStringLiteral("单元 %1 需要 %2 个节点，实际有 %3 个")
+                               .arg(static_cast<qlonglong>(element.id))
+                               .arg(static_cast<qulonglong>(expectedNodeCount))
+                               .arg(static_cast<qulonglong>(element.nodeIds.size()));
+            return result;
+        }
+        conn.clear();
+        for (const MeshId nodeId : element.nodeIds) {
+            const auto it = id2pid.find(nodeId);
             if (it == id2pid.end()) {
                 result.error = QStringLiteral("单元 %1 引用了不存在的节点 %2")
                                    .arg(static_cast<qlonglong>(element.id))
-                                   .arg(static_cast<qlonglong>(element.nodeIds[i]));
+                                   .arg(static_cast<qlonglong>(nodeId));
                 return result;
             }
-            conn[i] = it->second;
+            conn.push_back(it->second);
         }
-        grid->InsertNextCell(VTK_HEXAHEDRON, 8, conn);
+        grid->InsertNextCell(vtkCellType, static_cast<vtkIdType>(conn.size()), conn.data());
         elementIds->InsertNextValue(static_cast<vtkTypeInt64>(element.id)); // 保留原始单元号
     }
     grid->GetCellData()->AddArray(elementIds);

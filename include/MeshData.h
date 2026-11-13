@@ -16,7 +16,8 @@ struct MeshNode {
     std::array<double, 3> coordinates;
 };
 
-enum class ElementType { Hex8 };
+enum class CellTopology { Unknown, HEXAHEDRON };
+enum class ElementFormulation { Unspecified, C3D8, C3D8R };
 
 /**
  * @brief 网格单元
@@ -25,8 +26,9 @@ enum class ElementType { Hex8 };
  */
 struct MeshElement {
     MeshId id;
-    ElementType type;
     std::vector<MeshId> nodeIds;
+    CellTopology topology = CellTopology::Unknown;                    // 单元拓扑类型
+    ElementFormulation formulation = ElementFormulation::Unspecified; // 单元分析类型
 };
 
 /**

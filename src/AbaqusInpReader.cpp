@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QTextStream>
 
-enum Section { None, Node, ElementC3D8, NodeSet, Load, Boundary, Elastic };
+enum Section { None, Node, Element, NodeSet, Load, Boundary, Elastic };
 
 MeshReadResult AbaqusInpReader::read(const QString &path) const {
     MeshReadResult result;
@@ -18,6 +18,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
     Section sec = None;
     std::string currentNodeSetName; // 当前正在读取的节点集名称
     qint64 lineNumber = 0;          // 行号计数
+    ElementSectionInfo currentElement;
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed(); // 逐行读取
         ++lineNumber;
@@ -33,8 +34,29 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             if (keyword == "*NODE") {
                 sec = Node;
             } else if (keyword == "*ELEMENT") {
-                if (line.toUpper().contains("TYPE=C3D8"))
-                    sec = ElementC3D8;
+                QString type;
+                for (qsizetype i = 1; i < fields.size(); ++i) {
+                    const auto equalPosition = fields[i].indexOf('=');
+                    if (equalPosition < 0)
+                        continue;
+                    if (fields[i].left(equalPosition).trimmed().toUpper() == "TYPE") {
+                        type = fields[i].mid(equalPosition + 1).trimmed().toUpper();
+                        break;
+                    }
+                }
+                if (type.isEmpty()) {
+                    result.error = QStringLiteral("第 %1 行: *ELEMENT 缺少 TYPE").arg(lineNumber);
+                    return result;
+                }
+                if (type == "C3D8")
+                    currentElement = {CellTopology::HEXAHEDRON, ElementFormulation::C3D8, 8};
+                else if (type == "C3D8R")
+                    currentElement = {CellTopology::HEXAHEDRON, ElementFormulation::C3D8R, 8};
+                else {
+                    result.warnings.append(QStringLiteral("第 %1 行: 暂不支持单元 TYPE=%2，已跳过该段").arg(lineNumber).arg(type));
+                    continue;
+                }
+                sec = Element;
             } else if (keyword == "*NSET") {
                 QString setName;
                 bool generate = false;
@@ -100,10 +122,10 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 return result;
             }
             result.mesh.nodes.push_back(MeshNode{nid, {x, y, z}}); // 添加节点
-        } else if (sec == ElementC3D8) {
-            if (parts.size() < 9) {
-                result.error = QStringLiteral("第 %1 行: C3D8单元数据字段不足,"
-                                              "应为 eid, nid1, nid2, nid3, nid4, nid5, nid6, nid7, nid8. \n原文: %2")
+        } else if (sec == Element) {
+            if (parts.size() != 1 + currentElement.nodeCount) {
+                result.error = QStringLiteral("第 %1 行: 单元数据字段数量有误,"
+                                              "\n原文: %2")
                                    .arg(lineNumber)
                                    .arg(line);
                 return result;
@@ -116,9 +138,10 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
             }
             MeshElement element;
             element.id = eid;
-            element.type = ElementType::Hex8;
-            element.nodeIds.reserve(8);
-            for (int i = 0; i < 8; i++) {
+            element.topology = currentElement.topology;
+            element.formulation = currentElement.formulation;
+            element.nodeIds.reserve(currentElement.nodeCount);
+            for (int i = 0; i < currentElement.nodeCount; i++) {
                 bool okn = false;
                 MeshId nid = parts[i + 1].trimmed().toLongLong(&okn);
                 if (!okn) {

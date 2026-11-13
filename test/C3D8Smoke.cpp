@@ -13,10 +13,10 @@ int main() {
     std::vector<MeshNode> nodes{{1, {0, 0, 0}}, {2, {1, 0, 0}}, {3, {1, 1, 0}}, {4, {0, 1, 0}},
                                 {5, {0, 0, 1}}, {6, {1, 0, 1}}, {7, {1, 1, 1}}, {8, {0, 1, 1}}};
     // 02. 单元初始化, 材料id暂时不起作用
-    const C3D8Element element(1, nodes, 0);
+    const auto material = std::make_shared<const LinearElasticMaterial>(IsotropicElasticData{1000.0, 0.25});
+    const C3D8Element element(1, nodes, material);
     // 03. 计算弹性刚度矩阵
-    const auto D = computeIsotropicElasticMatrix({1000.0, 0.25});
-    const auto ke = element.computeElasticStiffness(D);
+    const auto ke = element.computeElasticStiffness();
     // 04. 验证体积和单元刚度矩阵
     assert(std::abs(element.volume() - 1.0) < 1e-12);
     assert(std::abs(ke[0][0] - 189.8148148148) < 1e-9);
@@ -32,7 +32,7 @@ int main() {
     // 07. 验证镜像后的单元是否被拒绝, 预期被拒绝, 因为没有按约定排列节点
     bool rejected = false;
     try {
-        const C3D8Element inverted(2, nodes, 0);
+        const C3D8Element inverted(2, nodes, material);
     } catch (const std::domain_error &) {
         rejected = true;
     }

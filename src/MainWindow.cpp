@@ -168,9 +168,9 @@ void MainWindow::showElementInfo(MeshId elementId) {
     for (MeshId nodeId : element.nodeIds)
         nodeIds.append(QString::number(static_cast<qlonglong>(nodeId)));
     QString typeName = tr("未知");
-    switch (element.type) {
-    case ElementType::Hex8:
-        typeName = QStringLiteral("Hex8");
+    switch (element.topology) {
+    case CellTopology::HEXAHEDRON:
+        typeName = QStringLiteral("Hexahedral");
         break;
     }
     infoTable_->setRowCount(3);

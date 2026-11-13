@@ -1,12 +1,13 @@
 #include "C3D8Element.h"
+#include "Material3D.h"
 #include "Matrix.h"
 
 #include <cmath>
 #include <stdexcept>
 #include <string>
 
-C3D8Element::C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex)
-    : SolidElement3D(id, std::move(nodes), materialIndex, 8) {
+C3D8Element::C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
+    : SolidElement3D(id, std::move(nodes), std::move(material), 8) {
     // 初始化各积分点的Bbar, 积分因子和单元体积
     initializeGeometry();
 }
@@ -131,8 +132,9 @@ void C3D8Element::initializeGeometry() {
     }
 }
 
-linalg::Matrix<24, 24> C3D8Element::computeElasticStiffness(const linalg::Matrix<6, 6> &D) const {
+linalg::Matrix<24, 24> C3D8Element::computeElasticStiffness() const {
     linalg::Matrix<24, 24> ke{};
+    const auto D = material_->initialElasticMatrix();
     for (const auto &point : geometry_) {
         const auto &Bbar = point.Bbar;
         // (6×6) × (6×24) → 6×24

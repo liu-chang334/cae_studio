@@ -3,9 +3,16 @@
 #include "IntegrationPointState.h"
 #include "MeshData.h"
 
+#include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
+class Material3D;
+
+/**
+ * @brief 实体单元基类
+ */
 class SolidElement3D {
 public:
     virtual ~SolidElement3D() = default;
@@ -35,12 +42,6 @@ public:
     std::size_t dofCount() const { return 3 * nodes_.size(); }
 
     /**
-     * @brief 获取材料数组中的0-based索引
-     * @return 材料数组中的0-based索引
-     */
-    std::size_t materialIndex() const { return materialIndex_; }
-
-    /**
      * @brief 获取积分点数量
      * @return 积分点数量
      */
@@ -60,11 +61,15 @@ protected:
      * @param materialIndex 材料数组中的0-based索引
      * @param integrationPointCount 积分点数量
      */
-    SolidElement3D(MeshId id, std::vector<MeshNode> nodes, std::size_t materialIndex, std::size_t integrationPointCount)
-        : id_(id), nodes_(std::move(nodes)), materialIndex_(materialIndex), integrationPointStates_(integrationPointCount) {}
+    SolidElement3D(MeshId id, std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material,
+                   std::size_t integrationPointCount)
+        : id_(id), nodes_(std::move(nodes)), material_(std::move(material)), integrationPointStates_(integrationPointCount) {
+        if (!material_)
+            throw std::invalid_argument("Solid element requires a material");
+    }
 
     MeshId id_;
     std::vector<MeshNode> nodes_;
-    std::size_t materialIndex_;
+    std::shared_ptr<const Material3D> material_;
     std::vector<IntegrationPointState> integrationPointStates_;
 };

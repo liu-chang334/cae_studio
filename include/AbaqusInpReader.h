@@ -9,6 +9,15 @@
 #include <QStringList>
 
 /**
+ * @brief 单元拓扑和分析类型以及单元节点数
+ */
+struct ElementSectionInfo {
+    CellTopology topology = CellTopology::Unknown;
+    ElementFormulation formulation = ElementFormulation::Unspecified;
+    qsizetype nodeCount = 0;
+};
+
+/**
  * @brief 保存读取Abaqus inp文件的结果
  * @details 包含网格数据, 错误信息, 警告信息
  * @note 通过success()方法判断是否成功读取文件
