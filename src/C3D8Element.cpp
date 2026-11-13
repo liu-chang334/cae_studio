@@ -6,8 +6,11 @@
 #include <stdexcept>
 #include <string>
 
-C3D8Element::C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
-    : SolidElement3D(id, std::move(nodes), std::move(material), 8) {
+C3D8Element::C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
+    : SolidElement3D(std::move(nodes), std::move(material), 8) {
+    if (nodeCount() != 8) {
+        throw std::invalid_argument("C3D8 requires exactly 8 nodes");
+    }
     // 初始化各积分点的Bbar, 积分因子和单元体积
     initializeGeometry();
 }
@@ -103,8 +106,7 @@ void C3D8Element::initializeGeometry() {
         const double detJ = linalg::determinant(jacobian);
         // 02. 检查雅可比矩阵是否退化
         if (!std::isfinite(detJ) || detJ <= 0.0)
-            throw std::domain_error("C3D8 element " + std::to_string(id()) + ", Gauss point " + std::to_string(gp + 1) +
-                                    ": detJ must be finite and positive");
+            throw std::domain_error("C3D8 element , Gauss point " + std::to_string(gp + 1) + ": detJ must be finite and positive");
         const auto globalGradients = computeShapeGradientsGlobal(referenceGradients, jacobian); // 对物理坐标偏导
         const auto B = computeB(globalGradients);                                               // 组装应变矩阵B
         const auto Bvol = computeVolumetricB(B);                                                // 组装体积应变矩阵

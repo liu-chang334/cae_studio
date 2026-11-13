@@ -58,6 +58,7 @@ add_executable(CAEStudio
   src/vtkBuilder.cpp
   src/C3D8Element.cpp # C3D8单元几何计算实现
   src/LinearElastic.cpp # 线性弹性材料实现
+  src/AnalysisModel.cpp # 计算模型实现
 )
 
 # 添加头文件搜索路径

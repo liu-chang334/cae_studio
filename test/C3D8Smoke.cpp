@@ -14,7 +14,7 @@ int main() {
                                 {5, {0, 0, 1}}, {6, {1, 0, 1}}, {7, {1, 1, 1}}, {8, {0, 1, 1}}};
     // 02. 单元初始化, 材料id暂时不起作用
     const auto material = std::make_shared<const LinearElasticMaterial>(IsotropicElasticData{1000.0, 0.25});
-    const C3D8Element element(1, nodes, material);
+    const C3D8Element element(nodes, material);
     // 03. 计算弹性刚度矩阵
     const auto ke = element.computeElasticStiffness();
     // 04. 验证体积和单元刚度矩阵
@@ -32,7 +32,7 @@ int main() {
     // 07. 验证镜像后的单元是否被拒绝, 预期被拒绝, 因为没有按约定排列节点
     bool rejected = false;
     try {
-        const C3D8Element inverted(2, nodes, material);
+        const C3D8Element inverted(nodes, material);
     } catch (const std::domain_error &) {
         rejected = true;
     }

@@ -18,12 +18,6 @@ public:
     virtual ~SolidElement3D() = default;
 
     /**
-     * @brief 获取单元id
-     * @return 单元id
-     */
-    MeshId id() const { return id_; }
-
-    /**
      * @brief 获取单元拓扑节点
      * @return 单元拓扑节点
      */
@@ -61,14 +55,12 @@ protected:
      * @param materialIndex 材料数组中的0-based索引
      * @param integrationPointCount 积分点数量
      */
-    SolidElement3D(MeshId id, std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material,
-                   std::size_t integrationPointCount)
-        : id_(id), nodes_(std::move(nodes)), material_(std::move(material)), integrationPointStates_(integrationPointCount) {
+    SolidElement3D(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material, std::size_t integrationPointCount)
+        : nodes_(std::move(nodes)), material_(std::move(material)), integrationPointStates_(integrationPointCount) {
         if (!material_)
             throw std::invalid_argument("Solid element requires a material");
     }
 
-    MeshId id_;
     std::vector<MeshNode> nodes_;
     std::shared_ptr<const Material3D> material_;
     std::vector<IntegrationPointState> integrationPointStates_;

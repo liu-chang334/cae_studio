@@ -16,7 +16,7 @@ public:
      * @param nodes 节点列表
      * @param materialIndex 材料索引
      */
-    C3D8Element(MeshId id, std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material);
+    C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material);
 
     /**
      * @brief 获取单元体积

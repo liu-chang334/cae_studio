@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-using MeshId = std::int64_t;
+using MeshId = std::int64_t; // 源网格或源节点id
 
 /**
  * @brief 网格节点

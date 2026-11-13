@@ -90,6 +90,7 @@ private:
 
     /// @brief vtk场景
     vtkScene *scene_ = nullptr;
+
     /// @brief 坐标系
     vtkSmartPointer<vtkOrientationMarkerWidget> orientationWidget_ = nullptr;
 };
