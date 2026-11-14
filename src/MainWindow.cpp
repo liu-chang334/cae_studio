@@ -231,11 +231,11 @@ void MainWindow::onOpenFile() {
     if (path.isEmpty())
         return;
     AbaqusInpReader reader;
-    auto readresult = reader.read(path);
-    for (const auto &warning : readresult.warnings)
-        logWidget_->appendPlainText(warning);
+    auto readresult = reader.read(std::filesystem::path(path.toStdWString()));
+    for (const std::string &warning : readresult.warnings)
+        logWidget_->appendPlainText(QString::fromStdString(warning));
     if (!readresult.success()) {
-        logWidget_->appendPlainText(readresult.error);
+        logWidget_->appendPlainText(QString::fromStdString(readresult.error));
         return;
     }
     vtkBuilder builder;

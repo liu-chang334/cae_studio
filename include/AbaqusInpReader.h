@@ -2,8 +2,10 @@
 
 #include "FEModel.h"
 
-#include <QString>
-#include <QStringList>
+#include <cstddef>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 /**
  * @brief 单元拓扑和分析类型以及单元节点数
@@ -11,7 +13,7 @@
 struct ElementSectionInfo {
     CellTopology topology = CellTopology::Unknown;
     ElementFormulation formulation = ElementFormulation::Unspecified;
-    qsizetype nodeCount = 0;
+    std::size_t nodeCount = 0;
 };
 
 /**
@@ -21,10 +23,10 @@ struct ElementSectionInfo {
  */
 struct AbaqusReadResult {
     FEModel model;
-    QString error;
-    QStringList warnings;
+    std::string error;
+    std::vector<std::string> warnings;
 
-    bool success() const { return error.isEmpty() && !model.mesh.nodes.empty() && !model.mesh.elements.empty(); }
+    bool success() const { return error.empty() && !model.mesh.nodes.empty() && !model.mesh.elements.empty(); }
 };
 
 /**
@@ -38,5 +40,5 @@ public:
      * @param path 文件路径
      * @return 读取结果, 包含网格数据, 错误信息, 警告信息
      */
-    AbaqusReadResult read(const QString &path) const;
+    AbaqusReadResult read(const std::filesystem::path &path) const;
 };

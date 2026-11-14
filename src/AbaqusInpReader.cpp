@@ -1,52 +1,113 @@
 #include "AbaqusInpReader.h"
 
 #include <cmath>
-
-#include <QFile>
-#include <QTextStream>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
 
 enum Section { None, Node, Element, NodeSet, Load, Boundary, Elastic };
 
-AbaqusReadResult AbaqusInpReader::read(const QString &path) const {
+struct SectionAssignment {
+    std::string setName;
+    std::string materialName;
+    std::size_t lineNumber;
+};
+
+std::string trim(const std::string &text) {
+    const char *whitespace = " \t\r\n";
+    const std::size_t first = text.find_first_not_of(whitespace);
+    if (first == std::string::npos)
+        return {};
+    const std::size_t last = text.find_last_not_of(whitespace);
+    return text.substr(first, last - first + 1);
+}
+
+std::string toUpperAscii(std::string text) {
+    for (char &ch : text) {
+        if (ch >= 'a' && ch <= 'z')
+            ch = static_cast<char>(ch - 'a' + 'A');
+    }
+    return text;
+}
+
+std::vector<std::string> splitComma(const std::string &line) {
+    std::vector<std::string> fields;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t comma = line.find(',', start);
+        if (comma == std::string::npos) {
+            fields.push_back(trim(line.substr(start)));
+            return fields;
+        }
+        fields.push_back(trim(line.substr(start, comma - start)));
+        start = comma + 1;
+    }
+}
+
+std::string keywordValue(const std::vector<std::string> &fields, const std::string &name) {
+    for (std::size_t i = 1; i < fields.size(); ++i) {
+        const std::size_t equal = fields[i].find('=');
+        if (equal == std::string::npos)
+            continue;
+        const std::string key = toUpperAscii(trim(fields[i].substr(0, equal)));
+        if (key == name)
+            return trim(fields[i].substr(equal + 1));
+    }
+    return {};
+}
+
+bool parseId(const std::string &field, MeshId &value) {
+    std::istringstream stream(field);
+    stream.imbue(std::locale::classic());
+    return (stream >> value) && stream.eof();
+}
+
+bool parseDouble(const std::string &field, double &value) {
+    std::istringstream stream(field);
+    stream.imbue(std::locale::classic());
+    return (stream >> value) && stream.eof() && std::isfinite(value);
+}
+
+std::string lineMessage(std::size_t lineNumber, const std::string &message) {
+    return "第 " + std::to_string(lineNumber) + " 行：" + message;
+}
+
+AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const {
     AbaqusReadResult result;
     auto &model = result.model;
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        result.error = QStringLiteral("无法打开文件: %1").arg(path);
+    std::ifstream input(path);
+    if (!input) {
+        result.error = "无法打开文件: " + path.u8string();
         return result;
     }
-    QTextStream in(&f);
-    Section sec = None;
-    std::string currentNodeSetName; // 当前正在读取的节点集名称
-    qint64 lineNumber = 0;          // 行号计数
+    Section section = Section::None;
     ElementSectionInfo currentElement;
-    while (!in.atEnd()) {
-        QString line = in.readLine().trimmed(); // 逐行读取
+    std::string currentNodeSetName;
+    std::string currentElementSet;
+    std::unordered_map<std::string, std::vector<MeshId>> elementSets;
+    std::vector<SectionAssignment> sectionAssignments;
+    std::string line;
+    std::size_t lineNumber = 0;
+    while (std::getline(input, line)) {
         ++lineNumber;
-        if (line.isEmpty())
-            continue; // 跳过空行
-        if (line.startsWith("**"))
-            continue; // 跳过注释行
-        if (line.startsWith("*")) {
-            const auto fields = line.split(',', Qt::KeepEmptyParts); // 将关键字与参数分开,如"*Nset", " nset=Set-1"
-            const QString keyword = fields[0].trimmed().toUpper();
-            sec = None;
+        if (lineNumber == 1 && line.compare(0, 3, "\xEF\xBB\xBF") == 0)
+            line.erase(0, 3);
+        line = trim(line);
+        if (line.empty() || line.compare(0, 2, "**") == 0)
+            continue;
+        if (line.front() == '*') {
+            const std::vector<std::string> fields = splitComma(line);
+            const std::string keyword = toUpperAscii(fields[0]);
+            section = Section::None;
             currentNodeSetName.clear();
+            currentElementSet.clear();
             if (keyword == "*NODE") {
-                sec = Node;
+                section = Section::Node;
             } else if (keyword == "*ELEMENT") {
-                QString type;
-                for (qsizetype i = 1; i < fields.size(); ++i) {
-                    const auto equalPosition = fields[i].indexOf('=');
-                    if (equalPosition < 0)
-                        continue;
-                    if (fields[i].left(equalPosition).trimmed().toUpper() == "TYPE") {
-                        type = fields[i].mid(equalPosition + 1).trimmed().toUpper();
-                        break;
-                    }
-                }
-                if (type.isEmpty()) {
-                    result.error = QStringLiteral("第 %1 行: *ELEMENT 缺少 TYPE").arg(lineNumber);
+                const std::string type = toUpperAscii(keywordValue(fields, "TYPE"));
+                if (type.empty()) {
+                    result.error = lineMessage(lineNumber, "*ELEMENT 缺少 TYPE");
                     return result;
                 }
                 if (type == "C3D8")
@@ -54,195 +115,173 @@ AbaqusReadResult AbaqusInpReader::read(const QString &path) const {
                 else if (type == "C3D8R")
                     currentElement = {CellTopology::HEXAHEDRON, ElementFormulation::C3D8R, 8};
                 else {
-                    result.warnings.append(QStringLiteral("第 %1 行: 暂不支持单元 TYPE=%2，已跳过该段").arg(lineNumber).arg(type));
+                    result.warnings.push_back(lineMessage(lineNumber, "暂不支持单元 TYPE=" + type + "，已跳过该段"));
                     continue;
                 }
-                sec = Element;
+                currentElementSet = toUpperAscii(keywordValue(fields, "ELSET"));
+                section = Section::Element;
             } else if (keyword == "*NSET") {
-                QString setName;
-                bool generate = false;
-                for (qsizetype i = 1; i < fields.size(); ++i) {
-                    const QString parameter = fields[i].trimmed();
-                    if (parameter.compare(QStringLiteral("GENERATE"), Qt::CaseInsensitive) == 0) {
-                        generate = true;
-                        continue;
-                    }
-                    const auto equalPosition = parameter.indexOf('=');
-                    if (equalPosition < 0)
-                        continue;
-                    const QString key = parameter.left(equalPosition).trimmed();
-                    const QString value = parameter.mid(equalPosition + 1).trimmed();
-                    if (key.compare(QStringLiteral("NSET"), Qt::CaseInsensitive) == 0) {
-                        setName = value;
+                for (std::size_t i = 1; i < fields.size(); ++i) {
+                    if (toUpperAscii(fields[i]) == "GENERATE") {
+                        result.error = lineMessage(lineNumber, "暂不支持节点集 GENERATE");
+                        return result;
                     }
                 }
-                if (generate) {
-                    result.error = QStringLiteral("第 %1 行: 暂不支持节点集的 GENERATE 形式. \n原文: %2").arg(lineNumber).arg(line);
+                currentNodeSetName = keywordValue(fields, "NSET");
+                if (currentNodeSetName.empty()) {
+                    result.error = lineMessage(lineNumber, "*NSET 缺少 NSET 名称");
                     return result;
                 }
-                if (setName.isEmpty()) {
-                    result.error =
-                        QStringLiteral("第 %1 行: 节点集缺少名称，应为 *Nset, nset=名称. \n原文: %2").arg(lineNumber).arg(line);
-                    return result;
-                }
-                currentNodeSetName = setName.toStdString();
                 model.mesh.nodeSets.try_emplace(currentNodeSetName);
-                sec = NodeSet;
-            } else if (keyword == "*LOAD") {
-                sec = Load;
-            } else if (keyword == "*BOUNDARY") {
+                section = Section::NodeSet;
+            } else if (keyword == "*LOAD")
+                section = Section::Load;
+            else if (keyword == "*BOUNDARY") {
                 if (fields.size() != 1) {
-                    result.error = QStringLiteral("第 %1 行: 当前暂不支持 *Boundary 的关键字参数.").arg(lineNumber);
+                    result.error = lineMessage(lineNumber, "暂不支持 *BOUNDARY 的关键字参数");
                     return result;
                 }
-                sec = Boundary;
+                section = Section::Boundary;
+            } else if (keyword == "*SOLID SECTION") {
+                const std::string setName = keywordValue(fields, "ELSET");
+                const std::string materialName = keywordValue(fields, "MATERIAL");
+                if (setName.empty() || materialName.empty()) {
+                    result.error = lineMessage(lineNumber, "*SOLID SECTION 需要 ELSET 和 MATERIAL");
+                    return result;
+                }
+                sectionAssignments.push_back({setName, materialName, lineNumber});
             } else if (keyword == "*MATERIAL") {
                 MaterialData material;
-                // fields[1] 为 " name=Material-1"  取等号右侧作为名称
-                material.name = fields[1].section('=', 1).trimmed().toStdString();
+                material.name = keywordValue(fields, "NAME");
+                if (material.name.empty()) {
+                    result.error = lineMessage(lineNumber, "*MATERIAL 缺少 NAME");
+                    return result;
+                }
                 model.materials.push_back(std::move(material));
             } else if (keyword == "*ELASTIC") {
-                sec = Elastic;
+                if (model.materials.empty()) {
+                    result.error = lineMessage(lineNumber, "*ELASTIC 前缺少 *MATERIAL");
+                    return result;
+                }
+                section = Section::Elastic;
             }
             continue;
         }
+        if (section == Section::None)
+            continue;
+        std::vector<std::string> parts = splitComma(line);
 
-        const auto parts = line.split(',', Qt::KeepEmptyParts); // 按逗号分隔
-        if (sec == Node) {
-            if (parts.size() < 4) {
-                result.error = QStringLiteral("第 %1 行: 节点数据字段不足, 应为 nid, x, y, z. \n原文: %2").arg(lineNumber).arg(line);
+        if (section == Section::Node) {
+            MeshNode node{};
+            if (parts.size() < 4 || !parseId(parts[0], node.id) || !parseDouble(parts[1], node.coordinates[0]) ||
+                !parseDouble(parts[2], node.coordinates[1]) || !parseDouble(parts[3], node.coordinates[2])) {
+                result.error = lineMessage(lineNumber, "节点数据应为 nid, x, y, z");
                 return result;
             }
-            bool okId = false, okx = false, oky = false, okz = false;
-            MeshId nid = parts[0].trimmed().toLongLong(&okId);
-            double x = parts[1].trimmed().toDouble(&okx);
-            double y = parts[2].trimmed().toDouble(&oky);
-            double z = parts[3].trimmed().toDouble(&okz);
-            if (!okId || !okx || !oky || !okz) {
-                result.error = QStringLiteral("第 %1 行: 节点编号或坐标无法转换为数值. \n原文: %2").arg(lineNumber).arg(line);
+            model.mesh.nodes.push_back(node);
+        } else if (section == Section::Element) {
+            MeshElement element{};
+            if (parts.size() != 1 + currentElement.nodeCount || !parseId(parts[0], element.id)) {
+                result.error = lineMessage(lineNumber, "单元编号或连接表字段数量有误");
                 return result;
             }
-            model.mesh.nodes.push_back(MeshNode{nid, {x, y, z}}); // 添加节点
-        } else if (sec == Element) {
-            if (parts.size() != 1 + currentElement.nodeCount) {
-                result.error = QStringLiteral("第 %1 行: 单元数据字段数量有误,"
-                                              "\n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
-                return result;
-            }
-            bool ok = false;
-            MeshId eid = parts[0].trimmed().toLongLong(&ok);
-            if (!ok) {
-                result.error = QStringLiteral("第 %1 行: 单元编号无法转换为整数. \n原文: %2").arg(lineNumber).arg(line);
-                return result;
-            }
-            MeshElement element;
-            element.id = eid;
             element.topology = currentElement.topology;
             element.formulation = currentElement.formulation;
             element.nodeIds.reserve(currentElement.nodeCount);
-            for (int i = 0; i < currentElement.nodeCount; i++) {
-                bool okn = false;
-                MeshId nid = parts[i + 1].trimmed().toLongLong(&okn);
-                if (!okn) {
-                    result.error = QStringLiteral("第 %1 行: 单元 %2 的第 %3 个节点编号"
-                                                  "无法转换为整数. \n原文: %4")
-                                       .arg(lineNumber)
-                                       .arg(static_cast<qlonglong>(eid))
-                                       .arg(i + 1)
-                                       .arg(line);
+            for (std::size_t i = 0; i < currentElement.nodeCount; ++i) {
+                MeshId nodeId{};
+                if (!parseId(parts[i + 1], nodeId)) {
+                    result.error = lineMessage(lineNumber, "单元 " + std::to_string(element.id) + " 的第 " + std::to_string(i + 1) +
+                                                               " 个节点编号无效");
                     return result;
                 }
-                element.nodeIds.push_back(nid); // 添加节点ID
+                element.nodeIds.push_back(nodeId);
             }
-            model.mesh.elements.push_back(std::move(element)); // 添加单元
-        } else if (sec == NodeSet) {
-            auto &nodeIds = model.mesh.nodeSets.at(currentNodeSetName);
-            for (qsizetype i = 0; i < parts.size(); ++i) {
-                const QString text = parts[i].trimmed();
-                if (text.isEmpty() && i == parts.size() - 1)
-                    continue;
-                bool ok = false;
-                const MeshId nid = text.toLongLong(&ok);
-                if (!ok) {
-                    result.error = QStringLiteral("第 %1 行: 节点集 %2 中的节点编号无法转换为整数。"
-                                                  "\n原文: %3")
-                                       .arg(lineNumber)
-                                       .arg(QString::fromStdString(currentNodeSetName))
-                                       .arg(line);
+            if (!currentElementSet.empty())
+                elementSets[currentElementSet].push_back(element.id);
+            model.mesh.elements.push_back(std::move(element));
+        } else if (section == Section::NodeSet) {
+            if (parts.back().empty())
+                parts.pop_back();
+            std::vector<MeshId> &nodeIds = model.mesh.nodeSets.at(currentNodeSetName);
+            for (const std::string &field : parts) {
+                MeshId nodeId{};
+                if (!parseId(field, nodeId)) {
+                    result.error = lineMessage(lineNumber, "节点集 " + currentNodeSetName + " 中的节点编号无效");
                     return result;
                 }
-                nodeIds.push_back(nid);
+                nodeIds.push_back(nodeId);
             }
-        } else if (sec == Load) {
-            auto loadParts = parts;
-            if (!loadParts.isEmpty() && loadParts.back().trimmed().isEmpty())
-                loadParts.removeLast();
-            if (loadParts.size() != 3) {
-                result.error = QStringLiteral("第 %1 行: 荷载应为 节点集名称, 方向, 力值. \n原文: %2").arg(lineNumber).arg(line);
+        } else if (section == Section::Load || section == Section::Boundary) {
+            if (parts.back().empty())
+                parts.pop_back();
+            MeshId dof{};
+            double value{};
+            if (parts.size() != 3 || parts[0].empty() || !parseId(parts[1], dof) || dof < 1 || dof > 3 ||
+                !parseDouble(parts[2], value)) {
+                result.error = lineMessage(lineNumber, "荷载或约束应为 节点集名称, 自由度(1–3), 有限数值");
                 return result;
             }
-            const QString setName = loadParts[0].trimmed();
-            bool okDof = false;
-            bool okMagnitude = false;
-            const int dof = loadParts[1].trimmed().toInt(&okDof);
-            const double magnitude = loadParts[2].trimmed().toDouble(&okMagnitude);
-            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okMagnitude || !std::isfinite(magnitude)) {
-                result.error = QStringLiteral("第 %1 行: 荷载名称不能为空, 方向须为 1～3, 力值须为有限数值."
-                                              "\n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
+            if (section == Section::Load)
+                model.loads.push_back({parts[0], static_cast<int>(dof), value});
+            else
+                model.boundaries.push_back({parts[0], static_cast<int>(dof), value});
+
+        } else if (section == Section::Elastic) {
+            IsotropicElasticData elastic;
+            if (parts.size() < 2 || !parseDouble(parts[0], elastic.youngModulus) || !parseDouble(parts[1], elastic.poissonRatio)) {
+                result.error = lineMessage(lineNumber, "*ELASTIC 需要有限的 E 和泊松比");
                 return result;
             }
-            model.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
-        } else if (sec == Boundary) {
-            auto boundaryParts = parts;
-            if (!boundaryParts.isEmpty() && boundaryParts.back().trimmed().isEmpty())
-                boundaryParts.removeLast();
-            if (boundaryParts.size() != 3) {
-                result.error = QStringLiteral("第 %1 行: 边界条件应为 节点集名称, 自由度, 指定位移."
-                                              "\n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
-                return result;
-            }
-            const QString setName = boundaryParts[0].trimmed();
-            bool okDof = false;
-            bool okDisplacement = false;
-            const int dof = boundaryParts[1].trimmed().toInt(&okDof);
-            const double displacement = boundaryParts[2].trimmed().toDouble(&okDisplacement);
-            if (setName.isEmpty() || !okDof || dof < 1 || dof > 3 || !okDisplacement || !std::isfinite(displacement)) {
-                result.error = QStringLiteral("第 %1 行: 节点集名称不能为空, 自由度须为 1～3,"
-                                              "位移须为有限数值. \n原文: %2")
-                                   .arg(lineNumber)
-                                   .arg(line);
-                return result;
-            }
-            model.boundaries.push_back(NodeSetBoundary{setName.toStdString(), dof, displacement});
-        } else if (sec == Elastic) {
-            const double E = parts[0].trimmed().toDouble();
-            const double nu = parts[1].trimmed().toDouble();
-            model.materials.back().elastic = IsotropicElasticData{E, nu};
+            model.materials.back().elastic = elastic;
         }
     }
-    f.close();
-    if (model.mesh.nodes.empty() || model.mesh.elements.empty()) {
-        result.error = QStringLiteral("未读取到有效网格.");
+    if (input.bad() || !input.eof()) {
+        result.error = "读取文件失败：" + path.u8string();
         return result;
     }
-    for (const auto &load : model.loads) {
-        const auto it = model.mesh.nodeSets.find(load.nodeSetName);
-        if (it == model.mesh.nodeSets.end() || it->second.empty()) {
-            result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1").arg(QString::fromStdString(load.nodeSetName));
+    if (model.mesh.nodes.empty() || model.mesh.elements.empty()) {
+        result.error = "未读取到有效网格";
+        return result;
+    }
+    for (const NodeSetLoad &load : model.loads) {
+        const auto set = model.mesh.nodeSets.find(load.nodeSetName);
+        if (set == model.mesh.nodeSets.end() || set->second.empty()) {
+            result.error = "荷载引用的节点集不存在或为空：" + load.nodeSetName;
             return result;
         }
     }
-    for (const auto &boundary : model.boundaries) {
-        const auto it = model.mesh.nodeSets.find(boundary.nodeSetName);
-        if (it == model.mesh.nodeSets.end() || it->second.empty()) {
-            result.error = QStringLiteral("边界条件引用的节点集不存在或为空: %1").arg(QString::fromStdString(boundary.nodeSetName));
+    for (const NodeSetBoundary &boundary : model.boundaries) {
+        const auto set = model.mesh.nodeSets.find(boundary.nodeSetName);
+        if (set == model.mesh.nodeSets.end() || set->second.empty()) {
+            result.error = "边界条件引用的节点集不存在或为空：" + boundary.nodeSetName;
             return result;
+        }
+    }
+    std::unordered_map<std::string, std::string> materialNames;
+    for (const MaterialData &material : model.materials) {
+        if (!materialNames.emplace(toUpperAscii(material.name), material.name).second) {
+            result.error = "材料名称重复：" + material.name;
+            return result;
+        }
+    }
+    for (const SectionAssignment &assignment : sectionAssignments) {
+        const auto set = elementSets.find(toUpperAscii(assignment.setName));
+        if (set == elementSets.end() || set->second.empty()) {
+            result.error = lineMessage(assignment.lineNumber, "单元集不存在或为空：" + assignment.setName);
+            return result;
+        }
+        const auto material = materialNames.find(toUpperAscii(assignment.materialName));
+        if (material == materialNames.end()) {
+            result.error = lineMessage(assignment.lineNumber, "材料未定义：" + assignment.materialName);
+            return result;
+        }
+        for (MeshId elementId : set->second) {
+            const auto inserted = model.materialNameByElementId.emplace(elementId, material->second);
+            if (!inserted.second && inserted.first->second != material->second) {
+                result.error = lineMessage(assignment.lineNumber, "单元 " + std::to_string(elementId) + " 被分配了不同的材料");
+                return result;
+            }
         }
     }
     return result;
