@@ -1,9 +1,6 @@
 #pragma once
 
-#include "BoundaryData.h"
-#include "LoadData.h"
-#include "MaterialData.h"
-#include "MeshData.h"
+#include "FEModel.h"
 
 #include <QString>
 #include <QStringList>
@@ -22,16 +19,12 @@ struct ElementSectionInfo {
  * @details 包含网格数据, 错误信息, 警告信息
  * @note 通过success()方法判断是否成功读取文件
  */
-struct MeshReadResult {
-    MeshData mesh;
-    std::vector<NodeSetLoad> loads;
-    std::vector<NodeSetBoundary> boundaries;
-    std::vector<MaterialData> materials;
-
+struct AbaqusReadResult {
+    FEModel model;
     QString error;
     QStringList warnings;
 
-    bool success() const { return error.isEmpty() && !mesh.nodes.empty() && !mesh.elements.empty(); }
+    bool success() const { return error.isEmpty() && !model.mesh.nodes.empty() && !model.mesh.elements.empty(); }
 };
 
 /**
@@ -45,5 +38,5 @@ public:
      * @param path 文件路径
      * @return 读取结果, 包含网格数据, 错误信息, 警告信息
      */
-    MeshReadResult read(const QString &path) const;
+    AbaqusReadResult read(const QString &path) const;
 };

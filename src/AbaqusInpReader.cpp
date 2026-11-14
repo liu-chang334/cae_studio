@@ -7,8 +7,9 @@
 
 enum Section { None, Node, Element, NodeSet, Load, Boundary, Elastic };
 
-MeshReadResult AbaqusInpReader::read(const QString &path) const {
-    MeshReadResult result;
+AbaqusReadResult AbaqusInpReader::read(const QString &path) const {
+    AbaqusReadResult result;
+    auto &model = result.model;
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         result.error = QStringLiteral("无法打开文件: %1").arg(path);
@@ -85,7 +86,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                     return result;
                 }
                 currentNodeSetName = setName.toStdString();
-                result.mesh.nodeSets.try_emplace(currentNodeSetName);
+                model.mesh.nodeSets.try_emplace(currentNodeSetName);
                 sec = NodeSet;
             } else if (keyword == "*LOAD") {
                 sec = Load;
@@ -99,7 +100,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 MaterialData material;
                 // fields[1] 为 " name=Material-1"  取等号右侧作为名称
                 material.name = fields[1].section('=', 1).trimmed().toStdString();
-                result.materials.push_back(std::move(material));
+                model.materials.push_back(std::move(material));
             } else if (keyword == "*ELASTIC") {
                 sec = Elastic;
             }
@@ -121,7 +122,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 result.error = QStringLiteral("第 %1 行: 节点编号或坐标无法转换为数值. \n原文: %2").arg(lineNumber).arg(line);
                 return result;
             }
-            result.mesh.nodes.push_back(MeshNode{nid, {x, y, z}}); // 添加节点
+            model.mesh.nodes.push_back(MeshNode{nid, {x, y, z}}); // 添加节点
         } else if (sec == Element) {
             if (parts.size() != 1 + currentElement.nodeCount) {
                 result.error = QStringLiteral("第 %1 行: 单元数据字段数量有误,"
@@ -155,9 +156,9 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                 }
                 element.nodeIds.push_back(nid); // 添加节点ID
             }
-            result.mesh.elements.push_back(std::move(element)); // 添加单元
+            model.mesh.elements.push_back(std::move(element)); // 添加单元
         } else if (sec == NodeSet) {
-            auto &nodeIds = result.mesh.nodeSets.at(currentNodeSetName);
+            auto &nodeIds = model.mesh.nodeSets.at(currentNodeSetName);
             for (qsizetype i = 0; i < parts.size(); ++i) {
                 const QString text = parts[i].trimmed();
                 if (text.isEmpty() && i == parts.size() - 1)
@@ -194,7 +195,7 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                                    .arg(line);
                 return result;
             }
-            result.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
+            model.loads.push_back(NodeSetLoad{setName.toStdString(), dof, magnitude});
         } else if (sec == Boundary) {
             auto boundaryParts = parts;
             if (!boundaryParts.isEmpty() && boundaryParts.back().trimmed().isEmpty())
@@ -218,28 +219,28 @@ MeshReadResult AbaqusInpReader::read(const QString &path) const {
                                    .arg(line);
                 return result;
             }
-            result.boundaries.push_back(NodeSetBoundary{setName.toStdString(), dof, displacement});
+            model.boundaries.push_back(NodeSetBoundary{setName.toStdString(), dof, displacement});
         } else if (sec == Elastic) {
             const double E = parts[0].trimmed().toDouble();
             const double nu = parts[1].trimmed().toDouble();
-            result.materials.back().elastic = IsotropicElasticData{E, nu};
+            model.materials.back().elastic = IsotropicElasticData{E, nu};
         }
     }
     f.close();
-    if (result.mesh.nodes.empty() || result.mesh.elements.empty()) {
+    if (model.mesh.nodes.empty() || model.mesh.elements.empty()) {
         result.error = QStringLiteral("未读取到有效网格.");
         return result;
     }
-    for (const auto &load : result.loads) {
-        const auto it = result.mesh.nodeSets.find(load.nodeSetName);
-        if (it == result.mesh.nodeSets.end() || it->second.empty()) {
+    for (const auto &load : model.loads) {
+        const auto it = model.mesh.nodeSets.find(load.nodeSetName);
+        if (it == model.mesh.nodeSets.end() || it->second.empty()) {
             result.error = QStringLiteral("荷载引用的节点集不存在或为空: %1").arg(QString::fromStdString(load.nodeSetName));
             return result;
         }
     }
-    for (const auto &boundary : result.boundaries) {
-        const auto it = result.mesh.nodeSets.find(boundary.nodeSetName);
-        if (it == result.mesh.nodeSets.end() || it->second.empty()) {
+    for (const auto &boundary : model.boundaries) {
+        const auto it = model.mesh.nodeSets.find(boundary.nodeSetName);
+        if (it == model.mesh.nodeSets.end() || it->second.empty()) {
             result.error = QStringLiteral("边界条件引用的节点集不存在或为空: %1").arg(QString::fromStdString(boundary.nodeSetName));
             return result;
         }

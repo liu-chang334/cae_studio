@@ -1,9 +1,6 @@
 #pragma once
 
-#include "BoundaryData.h"
-#include "LoadData.h"
-#include "MaterialData.h"
-#include "MeshData.h"
+#include "FEModel.h"
 
 #include <QFileDialog>
 #include <QMainWindow>
@@ -166,23 +163,8 @@ private:
     MeshViewport *viewport_ = nullptr;
 
     /**
-     * @brief 当前网格数据
-     * @details 第2份数据, 用于统计
+     * @brief 当前有限元模型数据
+     * @details 第2份数据, 用于统计和构建计算模型
      */
-    MeshData currentMesh_;
-
-    /**
-     * @brief 当前荷载数据
-     */
-    std::vector<NodeSetLoad> currentLoads_;
-
-    /**
-     * @brief 当前指定位移边界条件
-     */
-    std::vector<NodeSetBoundary> currentBoundaries_;
-
-    /**
-     * @brief 当前材料数据
-     */
-    std::vector<MaterialData> currentMaterials_;
+    FEModel currentModel_;
 };

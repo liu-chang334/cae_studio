@@ -93,8 +93,8 @@ void MainWindow::setupCentral() {
 }
 
 void MainWindow::updateModelTree() {
-    nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodes.size())));
-    elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.elements.size())));
+    nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.nodes.size())));
+    elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.elements.size())));
     while (nsetItem_->childCount() > 0)
         delete nsetItem_->takeChild(0); // 删除旧模型节点集条目
     while (loadItem_->childCount() > 0)
@@ -103,29 +103,29 @@ void MainWindow::updateModelTree() {
         delete boundaryItem_->takeChild(0); // 删除旧模型边界条件条目
     while (materialItem_->childCount() > 0)
         delete materialItem_->takeChild(0); // 删除旧模型材料条目
-    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentMesh_.nodeSets.size())));
-    loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentLoads_.size())));
-    boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentBoundaries_.size())));
-    materialItem_->setText(1, QString::number(static_cast<qulonglong>(currentMaterials_.size())));
-    for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
+    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.nodeSets.size())));
+    loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentModel_.loads.size())));
+    boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.boundaries.size())));
+    materialItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.materials.size())));
+    for (const auto &[name, nodeIds] : currentModel_.mesh.nodeSets) {
         auto *setItem = new QTreeWidgetItem(nsetItem_);
         setItem->setText(0, QString::fromStdString(name));
         setItem->setText(1, QString::number(static_cast<qulonglong>(nodeIds.size())));
     }
-    for (int i = 0; i < currentLoads_.size(); ++i) {
-        auto &load = currentLoads_[i];
+    for (int i = 0; i < currentModel_.loads.size(); ++i) {
+        auto &load = currentModel_.loads[i];
         auto *item = new QTreeWidgetItem(loadItem_);
         item->setText(0, tr(" %1, in %2").arg(QString::fromStdString(load.nodeSetName)).arg(load.degreeOfFreedom));
         item->setText(1, QString::number(load.magnitude, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的荷载值"));
     }
-    for (const auto &boundary : currentBoundaries_) {
+    for (const auto &boundary : currentModel_.boundaries) {
         auto *item = new QTreeWidgetItem(boundaryItem_);
         item->setText(0, tr("%1, in %2").arg(QString::fromStdString(boundary.nodeSetName)).arg(boundary.degreeOfFreedom));
         item->setText(1, QString::number(boundary.displacement, 'g', 12));
         item->setToolTip(1, tr("节点集中每个节点的指定位移值"));
     }
-    for (const auto &material : currentMaterials_) {
+    for (const auto &material : currentModel_.materials) {
         auto *item = new QTreeWidgetItem(materialItem_);
         item->setText(0, QString::fromStdString(material.name));
         if (material.elastic) {
@@ -156,7 +156,7 @@ void MainWindow::setupInfoTable() {
 }
 
 void MainWindow::showElementInfo(MeshId elementId) {
-    const auto &elements = currentMesh_.elements;
+    const auto &elements = currentModel_.mesh.elements;
     const auto it =
         std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) { return element.id == elementId; });
     if (it == elements.end()) {
@@ -185,7 +185,7 @@ void MainWindow::showElementInfo(MeshId elementId) {
 }
 
 void MainWindow::showNodeInfo(MeshId nodeId) {
-    const auto &nodes = currentMesh_.nodes;
+    const auto &nodes = currentModel_.mesh.nodes;
     const auto it = std::find_if(nodes.begin(), nodes.end(), [nodeId](const MeshNode &node) { return node.id == nodeId; });
     if (it == nodes.end()) {
         infoTable_->setRowCount(0);
@@ -231,31 +231,28 @@ void MainWindow::onOpenFile() {
     if (path.isEmpty())
         return;
     AbaqusInpReader reader;
-    auto meshdata = reader.read(path);
-    for (const auto &warning : meshdata.warnings)
+    auto readresult = reader.read(path);
+    for (const auto &warning : readresult.warnings)
         logWidget_->appendPlainText(warning);
-    if (!meshdata.success()) {
-        logWidget_->appendPlainText(meshdata.error);
+    if (!readresult.success()) {
+        logWidget_->appendPlainText(readresult.error);
         return;
     }
     vtkBuilder builder;
-    const auto result = builder.build(meshdata.mesh);
-    if (!result.success()) {
-        logWidget_->appendPlainText(result.error);
+    const auto vtkdata = builder.build(readresult.model.mesh);
+    if (!vtkdata.success()) {
+        logWidget_->appendPlainText(vtkdata.error);
         return;
     }
-    currentMesh_ = std::move(meshdata.mesh);
-    currentLoads_ = std::move(meshdata.loads);
-    currentBoundaries_ = std::move(meshdata.boundaries);
-    currentMaterials_ = std::move(meshdata.materials);
-    viewport_->setMesh(result.grid);
+    currentModel_ = std::move(readresult.model);
+    viewport_->setMesh(vtkdata.grid);
     updateModelTree();
     infoTable_->setRowCount(0);
     // 加载成功打印日志
     logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元, %3 种材料.")
-                                    .arg(static_cast<qulonglong>(currentMesh_.nodes.size()))
-                                    .arg(static_cast<qulonglong>(currentMesh_.elements.size()))
-                                    .arg(static_cast<qulonglong>(currentMaterials_.size())));
+                                    .arg(static_cast<qulonglong>(currentModel_.mesh.nodes.size()))
+                                    .arg(static_cast<qulonglong>(currentModel_.mesh.elements.size()))
+                                    .arg(static_cast<qulonglong>(currentModel_.materials.size())));
     // for (const auto &[name, nodeIds] : currentMesh_.nodeSets) {
     //     logWidget_->appendPlainText(tr("节点集 %1: %2 个节点")
     //                                     .arg(QString::fromStdString(name))
