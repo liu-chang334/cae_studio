@@ -41,8 +41,8 @@ void MainWindow::setupModelPanel() {
     elemItem_->setText(0, "Element");
     nsetItem_ = new QTreeWidgetItem(root_item);
     nsetItem_->setText(0, "Nset");
-    QTreeWidgetItem *elemset_item = new QTreeWidgetItem(root_item);
-    elemset_item->setText(0, "Eset");
+    esetItem_ = new QTreeWidgetItem(root_item);
+    esetItem_->setText(0, "Eset");
     materialItem_ = new QTreeWidgetItem(root_item);
     materialItem_->setText(0, tr("Material"));
     boundaryItem_ = new QTreeWidgetItem(root_item);
@@ -97,20 +97,28 @@ void MainWindow::updateModelTree() {
     elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.elements.size())));
     while (nsetItem_->childCount() > 0)
         delete nsetItem_->takeChild(0); // 删除旧模型节点集条目
+    while (esetItem_->childCount() > 0)
+        delete esetItem_->takeChild(0); // 删除旧模型单元集条目
     while (loadItem_->childCount() > 0)
         delete loadItem_->takeChild(0); // 删除旧模型荷载条目
     while (boundaryItem_->childCount() > 0)
         delete boundaryItem_->takeChild(0); // 删除旧模型边界条件条目
     while (materialItem_->childCount() > 0)
         delete materialItem_->takeChild(0); // 删除旧模型材料条目
-    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.nodeSets.size())));
+    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.nodeSets.size())));
+    esetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.elemSets.size())));
     loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentModel_.loads.size())));
     boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.boundaries.size())));
     materialItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.materials.size())));
-    for (const auto &[name, nodeIds] : currentModel_.mesh.nodeSets) {
+    for (const auto &[name, nodeIds] : currentModel_.nodeSets) {
         auto *setItem = new QTreeWidgetItem(nsetItem_);
         setItem->setText(0, QString::fromStdString(name));
         setItem->setText(1, QString::number(static_cast<qulonglong>(nodeIds.size())));
+    }
+    for (const auto &[name, elemIds] : currentModel_.elemSets) {
+        auto *setItem = new QTreeWidgetItem(esetItem_);
+        setItem->setText(0, QString::fromStdString(name));
+        setItem->setText(1, QString::number(static_cast<qulonglong>(elemIds.size())));
     }
     for (int i = 0; i < currentModel_.loads.size(); ++i) {
         auto &load = currentModel_.loads[i];

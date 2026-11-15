@@ -85,7 +85,6 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     ElementSectionInfo currentElement;
     std::string currentNodeSetName;
     std::string currentElementSet;
-    std::unordered_map<std::string, std::vector<MeshId>> elementSets;
     std::vector<SectionAssignment> sectionAssignments;
     std::string line;
     std::size_t lineNumber = 0;
@@ -132,7 +131,7 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                     result.error = lineMessage(lineNumber, "*NSET 缺少 NSET 名称");
                     return result;
                 }
-                model.mesh.nodeSets.try_emplace(currentNodeSetName);
+                model.nodeSets.try_emplace(currentNodeSetName);
                 section = Section::NodeSet;
             } else if (keyword == "*LOAD")
                 section = Section::Load;
@@ -198,12 +197,12 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 element.nodeIds.push_back(nodeId);
             }
             if (!currentElementSet.empty())
-                elementSets[currentElementSet].push_back(element.id);
+                model.elemSets[currentElementSet].push_back(element.id);
             model.mesh.elements.push_back(std::move(element));
         } else if (section == Section::NodeSet) {
             if (parts.back().empty())
                 parts.pop_back();
-            std::vector<MeshId> &nodeIds = model.mesh.nodeSets.at(currentNodeSetName);
+            std::vector<MeshId> &nodeIds = model.nodeSets.at(currentNodeSetName);
             for (const std::string &field : parts) {
                 MeshId nodeId{};
                 if (!parseId(field, nodeId)) {
@@ -245,15 +244,15 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
         return result;
     }
     for (const NodeSetLoad &load : model.loads) {
-        const auto set = model.mesh.nodeSets.find(load.nodeSetName);
-        if (set == model.mesh.nodeSets.end() || set->second.empty()) {
+        const auto set = model.nodeSets.find(load.nodeSetName);
+        if (set == model.nodeSets.end() || set->second.empty()) {
             result.error = "荷载引用的节点集不存在或为空：" + load.nodeSetName;
             return result;
         }
     }
     for (const NodeSetBoundary &boundary : model.boundaries) {
-        const auto set = model.mesh.nodeSets.find(boundary.nodeSetName);
-        if (set == model.mesh.nodeSets.end() || set->second.empty()) {
+        const auto set = model.nodeSets.find(boundary.nodeSetName);
+        if (set == model.nodeSets.end() || set->second.empty()) {
             result.error = "边界条件引用的节点集不存在或为空：" + boundary.nodeSetName;
             return result;
         }
@@ -266,8 +265,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
         }
     }
     for (const SectionAssignment &assignment : sectionAssignments) {
-        const auto set = elementSets.find(toUpperAscii(assignment.setName));
-        if (set == elementSets.end() || set->second.empty()) {
+        const auto set = model.elemSets.find(toUpperAscii(assignment.setName));
+        if (set == model.elemSets.end() || set->second.empty()) {
             result.error = lineMessage(assignment.lineNumber, "单元集不存在或为空：" + assignment.setName);
             return result;
         }

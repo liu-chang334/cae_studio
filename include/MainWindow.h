@@ -127,6 +127,11 @@ private:
     QTreeWidgetItem *nsetItem_ = nullptr;
 
     /**
+     * @brief 单元集父条目
+     */
+    QTreeWidgetItem *esetItem_ = nullptr;
+
+    /**
      * @brief 荷载父条目
      */
     QTreeWidgetItem *loadItem_ = nullptr;

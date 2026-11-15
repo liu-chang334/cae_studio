@@ -1,8 +1,6 @@
 #pragma once
 #include <array>
 #include <cstdint>
-#include <map>
-#include <string>
 #include <vector>
 
 using MeshId = std::int64_t; // 源网格或源节点id
@@ -33,10 +31,9 @@ struct MeshElement {
 
 /**
  * @brief 网格数据
- * @details 网格数据包含所有节点、单元和节点集
+ * @details 网格数据只包含节点和单元
  */
 struct MeshData {
     std::vector<MeshNode> nodes;
     std::vector<MeshElement> elements;
-    std::map<std::string, std::vector<MeshId>> nodeSets;
 };

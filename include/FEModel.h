@@ -5,12 +5,21 @@
 #include "MaterialData.h"
 #include "MeshData.h"
 
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+/**
+ * @brief 有限元模型数据
+ * @details 包含网格数据, 集合信息, 材料数据, 载荷数据, 边界条件数据, 材料单元分配表
+ */
 struct FEModel {
     MeshData mesh;
+
+    std::map<std::string, std::vector<MeshId>> nodeSets;
+    std::map<std::string, std::vector<MeshId>> elemSets;
+
     std::vector<MaterialData> materials;
     std::vector<NodeSetLoad> loads;
     std::vector<NodeSetBoundary> boundaries;
