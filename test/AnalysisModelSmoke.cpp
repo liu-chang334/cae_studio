@@ -31,11 +31,11 @@ void checkElement(const AnalysisModel &analysis, std::size_t elementNumber, Mesh
     const auto actual = element->computeElasticStiffness();
     const auto expected = reference.computeElasticStiffness();
 
-    for (std::size_t row = 0; row < actual.size(); ++row) {
-        for (std::size_t col = 0; col < actual[row].size(); ++col) {
-            const double expectedValue = expected[row][col];
+    for (std::size_t row = 0; row < actual.rows(); ++row) {
+        for (std::size_t col = 0; col < actual.cols(); ++col) {
+            const double expectedValue = expected(row, col);
             const double tolerance = 1e-6 + 1e-10 * std::abs(expectedValue);
-            const double actualValue = actual[row][col];
+            const double actualValue = actual(row, col);
 
             if (!std::isfinite(actualValue) || std::abs(actualValue - expectedValue) > tolerance) {
                 throw std::runtime_error(label + " stiffness mismatch at [" + std::to_string(row) + "][" + std::to_string(col) + "]");
@@ -77,7 +77,19 @@ int main(int argc, char *argv[]) {
         }
         checkElement(analysis, 300, 300, {2.1e9, 0.003}); // Mat-1
         checkElement(analysis, 301, 301, {3.2e9, 0.002}); // Mat-2
+        const auto K = analysis.assembleElasticStiffness();
+        if (K.rows() != 2808 || K.cols() != 2808)
+            throw std::runtime_error("Unexpected global stiffness dimensions");
 
+        const auto &e1 = dynamic_cast<const C3D8Element &>(analysis.element(1));
+        const auto &e2 = dynamic_cast<const C3D8Element &>(analysis.element(2));
+        const auto g = analysis.globalDofIndex(2, 1);
+        const double expected = e1.computeElasticStiffness()(15, 15) + e2.computeElasticStiffness()(12, 12);
+
+        const double actual = K(g, g);
+        const double tolerance = 1e-6 + 1e-10 * std::abs(expected);
+        if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
+            throw std::runtime_error("Shared node stiffness was not assembled correctly");
         std::cout << "AnalysisModel smoke test passed\n";
         return 0;
     } catch (const std::exception &error) {

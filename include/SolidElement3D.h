@@ -47,6 +47,8 @@ public:
      */
     const std::vector<IntegrationPointState> &integrationPointStates() const { return integrationPointStates_; }
 
+    virtual linalg::MatrixX computeElasticStiffness() const = 0;
+
 protected:
     /**
      * @brief 由派生类调用, 初始化公共数据

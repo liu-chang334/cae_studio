@@ -26,9 +26,9 @@ public:
 
     /**
      * @brief 计算单元的弹性刚度矩阵
-     * @return 单元的弹性刚度矩阵
+     * @return 单元的弹性刚度矩阵, 维度为24x24
      */
-    linalg::Matrix<24, 24> computeElasticStiffness() const; // NOTE: 后续扩展成弹塑性统一接口
+    linalg::MatrixX computeElasticStiffness() const override; // NOTE: 后续扩展成弹塑性统一接口
 
 private:
     /**

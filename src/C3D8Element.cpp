@@ -134,17 +134,18 @@ void C3D8Element::initializeGeometry() {
     }
 }
 
-linalg::Matrix<24, 24> C3D8Element::computeElasticStiffness() const {
-    linalg::Matrix<24, 24> ke{};
+linalg::MatrixX C3D8Element::computeElasticStiffness() const {
+    const auto n = dofCount();
+    linalg::MatrixX ke(n, n);
     const auto D = material_->initialElasticMatrix();
     for (const auto &point : geometry_) {
         const auto &Bbar = point.Bbar;
         // (6×6) × (6×24) → 6×24
         const auto DB = linalg::multiply(D, Bbar);                                 // 6×24
         const auto pointStiffness = linalg::multiply(linalg::transpose(Bbar), DB); // 24×24
-        for (std::size_t row = 0; row < ke.size(); ++row) {
-            for (std::size_t col = 0; col < ke[row].size(); ++col) {
-                ke[row][col] += pointStiffness[row][col] * point.integrationFactor;
+        for (std::size_t row = 0; row < ke.rows(); ++row) {
+            for (std::size_t col = 0; col < ke.cols(); ++col) {
+                ke(row, col) += pointStiffness[row][col] * point.integrationFactor;
             }
         }
     }

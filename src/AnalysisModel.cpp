@@ -149,3 +149,25 @@ void AnalysisModel::initializeNodalConditions(const FEModel &model) {
         }
     }
 }
+
+linalg::MatrixX AnalysisModel::assembleElasticStiffness() const {
+    const auto n = globalDofCount();
+    linalg::MatrixX K(n, n);
+    for (const auto &entry : elements_) {
+        const SolidElement3D &element = *entry.element;
+        std::vector<std::size_t> dofs;
+        dofs.reserve(element.dofCount());
+        for (const auto &node : element.nodes()) {
+            const auto gx = globalDofIndex(node.id, 1);
+            dofs.push_back(gx);     // x
+            dofs.push_back(gx + 1); // y
+            dofs.push_back(gx + 2); // z
+        }
+        const auto ke = element.computeElasticStiffness();
+        for (std::size_t i = 0; i < dofs.size(); ++i) {
+            for (std::size_t j = 0; j < dofs.size(); ++j)
+                K(dofs[i], dofs[j]) += ke(i, j);
+        }
+    }
+    return K;
+}

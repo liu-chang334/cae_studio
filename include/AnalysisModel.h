@@ -45,6 +45,11 @@ public:
      */
     std::size_t globalDofIndex(MeshId nodeId, int direction) const;
 
+    /**
+     * @brief 组装尚未施加位移约束的全局弹性刚度矩阵
+     */
+    linalg::MatrixX assembleElasticStiffness() const;
+
     const linalg::VectorX &forceVector() const noexcept { return forceVector_; }
 
     const std::vector<std::optional<double>> &prescribedDisplacements() const noexcept { return prescribedDisplacements_; }
