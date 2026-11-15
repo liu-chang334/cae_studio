@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Matrix.h"
 #include "SolidElement3D.h"
 
 #include <memory>
@@ -35,28 +36,32 @@ public:
      * @brief 获取计算模型中单元的数量
      * @return 单元数量
      */
-    std::size_t elementCount() const;
+    std::size_t elementCount() const { return elements_.size(); }
 
-    std::size_t globalDofCount() const;
+    std::size_t globalDofCount() const { return 3 * nodeIndexById_.size(); }
 
     /**
      * @brief 获取计算模型中指定源节点在指定方向的0-based全局自由度索引
      */
     std::size_t globalDofIndex(MeshId nodeId, int direction) const;
 
+    const linalg::VectorX &forceVector() const noexcept { return forceVector_; }
+
+    const std::vector<std::optional<double>> &prescribedDisplacements() const noexcept { return prescribedDisplacements_; }
+
     /**
      * @brief 获取计算模型中指定1-based索引的单元的引用
      * @param[in] number 单元在计算模型中的1-based索引
      * @return 单元指针的解引用
      */
-    const SolidElement3D &element(std::size_t number) const;
+    const SolidElement3D &element(std::size_t number) const { return *elements_[indexOf(number)].element; }
 
     /**
      * @brief 获取计算模型中指定1-based索引的单元的源id
      * @param[in] number 单元在计算模型中的1-based索引
      * @return 源id
      */
-    std::optional<MeshId> sourceElementId(std::size_t number) const;
+    std::optional<MeshId> sourceElementId(std::size_t number) const { return elements_[indexOf(number)].sourceId; }
 
 private:
     /**
@@ -76,6 +81,8 @@ private:
      */
     std::size_t indexOf(std::size_t number) const;
 
+    void initializeNodalConditions(const FEModel &model);
+
 private:
     /**
      * @brief 计算模型中的单元实体
@@ -88,4 +95,7 @@ private:
      * @details 值为连续的0-based节点索引
      */
     std::unordered_map<MeshId, std::size_t> nodeIndexById_;
+
+    linalg::VectorX forceVector_;
+    std::vector<std::optional<double>> prescribedDisplacements_;
 };

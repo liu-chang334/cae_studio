@@ -4,7 +4,13 @@
 #include <stdexcept>
 
 namespace linalg {
-Matrix<3, 3> adjugate(const Matrix<3, 3> &matrix) {
+MatrixX::MatrixX(std::size_t rows, std::size_t cols) : rows_(rows), cols_(cols) {
+    if (cols_ != 0 && rows_ > values_.max_size() / cols_)
+        throw std::length_error("MatrixX dimensions are too large");
+    values_.resize(rows_ * cols_, 0.0);
+}
+
+Matrix<3, 3> adjugate_3x3(const Matrix<3, 3> &matrix) {
     const auto &[a00, a01, a02] = matrix[0];
     const auto &[a10, a11, a12] = matrix[1];
     const auto &[a20, a21, a22] = matrix[2];
@@ -17,7 +23,7 @@ Matrix<3, 3> adjugate(const Matrix<3, 3> &matrix) {
     return result;
 }
 
-double determinant(const Matrix<3, 3> &matrix) {
+double determinant_3x3(const Matrix<3, 3> &matrix) {
     const auto &[a00, a01, a02] = matrix[0];
     const auto &[a10, a11, a12] = matrix[1];
     const auto &[a20, a21, a22] = matrix[2];
@@ -30,11 +36,11 @@ double determinant(const Matrix<3, 3> &matrix) {
     return det;
 }
 
-Matrix<3, 3> inverse(const Matrix<3, 3> &matrix) {
-    const double det = determinant(matrix);
+Matrix<3, 3> inverse_3x3(const Matrix<3, 3> &matrix) {
+    const double det = determinant_3x3(matrix);
     if (!std::isfinite(det) || det == 0.0) // 检查行列式是否为0或非有限数
         throw std::domain_error("Matrix determinant is zero or non-finite");
-    Matrix<3, 3> result = adjugate(matrix);
+    Matrix<3, 3> result = adjugate_3x3(matrix);
     for (auto &row : result) {
         for (double &value : row) {
             value /= det;

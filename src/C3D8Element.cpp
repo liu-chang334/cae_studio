@@ -53,7 +53,7 @@ linalg::Matrix<3, 3> C3D8Element::computeJacobian(const linalg::Matrix<3, 8> &re
 
 linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsGlobal(const linalg::Matrix<3, 8> &referenceGradients,
                                                               const linalg::Matrix<3, 3> &jacobian) {
-    const auto inverseJacobian = linalg::inverse(jacobian);
+    const auto inverseJacobian = linalg::inverse_3x3(jacobian);
     linalg::Matrix<3, 8> globalGradients = linalg::multiply(inverseJacobian, referenceGradients);
     return globalGradients;
 }
@@ -103,7 +103,7 @@ void C3D8Element::initializeGeometry() {
     for (std::size_t gp = 0; gp < gaussPoints.size(); ++gp) {
         const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]); // 对自然坐标偏导
         const auto jacobian = computeJacobian(referenceGradients, coordinates);          // 雅可比矩阵
-        const double detJ = linalg::determinant(jacobian);
+        const double detJ = linalg::determinant_3x3(jacobian);
         // 02. 检查雅可比矩阵是否退化
         if (!std::isfinite(detJ) || detJ <= 0.0)
             throw std::domain_error("C3D8 element , Gauss point " + std::to_string(gp + 1) + ": detJ must be finite and positive");

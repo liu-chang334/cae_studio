@@ -28,7 +28,7 @@ public:
      * @brief 计算单元的弹性刚度矩阵
      * @return 单元的弹性刚度矩阵
      */
-    linalg::Matrix<24, 24> computeElasticStiffness() const;
+    linalg::Matrix<24, 24> computeElasticStiffness() const; // NOTE: 后续扩展成弹塑性统一接口
 
 private:
     /**

@@ -7,6 +7,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace {
+const std::vector<MeshId> &nodeIdsInSet(const FEModel &model, const std::string &setName) {
+    const auto set = model.nodeSets.find(setName);
+    if (set == model.nodeSets.end() || set->second.empty())
+        throw std::invalid_argument("Unknown or empty node set: " + setName);
+    return set->second;
+}
+} // namespace
+
 std::size_t AnalysisModel::addElement(std::unique_ptr<SolidElement3D> element, std::optional<MeshId> sourceId) {
     if (!element)
         throw std::invalid_argument("Cannot add a null element");
@@ -19,10 +28,6 @@ void AnalysisModel::removeElement(std::size_t number) {
     elements_.erase(elements_.begin() + index);
 }
 
-std::size_t AnalysisModel::elementCount() const { return elements_.size(); }
-
-std::size_t AnalysisModel::globalDofCount() const { return 3 * nodeIndexById_.size(); }
-
 std::size_t AnalysisModel::globalDofIndex(MeshId nodeId, int direction) const {
     if (direction < 1 || direction > 3)
         throw std::out_of_range("Direction must be in [1,3]");
@@ -31,10 +36,6 @@ std::size_t AnalysisModel::globalDofIndex(MeshId nodeId, int direction) const {
         throw std::out_of_range("Unknown node ID: " + std::to_string(nodeId));
     return 3 * (node->second) + static_cast<std::size_t>(direction - 1);
 }
-
-const SolidElement3D &AnalysisModel::element(std::size_t number) const { return *elements_[indexOf(number)].element; }
-
-std::optional<MeshId> AnalysisModel::sourceElementId(std::size_t number) const { return elements_[indexOf(number)].sourceId; }
 
 std::size_t AnalysisModel::indexOf(std::size_t number) const {
     if (number == 0 || number > elements_.size())
@@ -115,6 +116,36 @@ AnalysisModel::AnalysisModel(const FEModel &model) {
             throw std::invalid_argument(label + " has no element formulation");
         default:
             throw std::invalid_argument(label + " has an unsupported formulation");
+        }
+    }
+    initializeNodalConditions(model);
+}
+
+void AnalysisModel::initializeNodalConditions(const FEModel &model) {
+    forceVector_.assign(globalDofCount(), 0.0);
+    prescribedDisplacements_.assign(globalDofCount(), std::nullopt);
+    for (const auto &load : model.loads) {
+        if (!std::isfinite(load.magnitude))
+            throw std::invalid_argument("non-finite load on node set: " + load.nodeSetName);
+        std::unordered_set<MeshId> loadedNodes;
+        for (MeshId nodeId : nodeIdsInSet(model, load.nodeSetName)) {
+            if (!loadedNodes.insert(nodeId).second)
+                continue;
+            const auto dof = globalDofIndex(nodeId, load.degreeOfFreedom);
+            auto &force = forceVector_[dof];
+            force += load.magnitude;
+        }
+    }
+    for (const auto &boundary : model.boundaries) {
+        if (!std::isfinite(boundary.displacement))
+            throw std::invalid_argument("non-finite boundary displacement on node set: " + boundary.nodeSetName);
+        for (MeshId nodeId : nodeIdsInSet(model, boundary.nodeSetName)) {
+            const auto dof = globalDofIndex(nodeId, boundary.degreeOfFreedom);
+            auto &prescribed = prescribedDisplacements_[dof];
+            if (prescribed.has_value() && *prescribed != boundary.displacement)
+                throw std::invalid_argument("Conflicting prescribed displacement at node " + std::to_string(nodeId) + ", direction " +
+                                            std::to_string(boundary.degreeOfFreedom));
+            prescribed = boundary.displacement;
         }
     }
 }
