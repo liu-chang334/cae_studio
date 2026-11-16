@@ -50,4 +50,41 @@ Matrix<3, 3> inverse_3x3(const Matrix<3, 3> &matrix) {
     }
     return result;
 }
+
+VectorX solveCholesky(const MatrixX &A, const VectorX &rhs) {
+    const auto n = A.rows();
+    if (A.cols() != n || rhs.size() != n)
+        throw std::invalid_argument("Cholesky system dimensions do not match");
+    MatrixX L(n, n);
+    for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j <= i; ++j) {
+            double value = A(i, j);
+            for (std::size_t k = 0; k < j; ++k)
+                value -= L(i, k) * L(j, k);
+            if (i == j) {
+                if (!std::isfinite(value) || value <= 0.0)
+                    throw std::domain_error("Cholesky requires positive finite pivots");
+                L(i, i) = std::sqrt(value);
+            } else
+                L(i, j) = value / L(j, j);
+        }
+    }
+    VectorX y(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        double value = rhs[i];
+        for (std::size_t j = 0; j < i; ++j)
+            value -= L(i, j) * y[j];
+        y[i] = value / L(i, i);
+    }
+
+    VectorX x(n);
+    for (std::size_t i = n; i > 0; --i) {
+        const auto row = i - 1;
+        double value = y[row];
+        for (std::size_t j = row + 1; j < n; ++j)
+            value -= L(j, row) * x[j]; // L^T(row, j) = L(j, row)
+        x[row] = value / L(row, row);
+    }
+    return x;
+}
 } // namespace linalg

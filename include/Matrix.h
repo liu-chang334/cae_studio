@@ -106,4 +106,12 @@ double determinant_3x3(const Matrix<3, 3> &matrix);
  * @return 3x3矩阵的逆矩阵
  */
 Matrix<3, 3> inverse_3x3(const Matrix<3, 3> &matrix);
+
+/**
+ * @brief 通过Cholesky分解求解线性方程组 Ax = rhs
+ * @param A 对称正定矩阵
+ * @param rhs 右端项向量
+ * @return 解向量
+ */
+VectorX solveCholesky(const MatrixX &A, const VectorX &rhs);
 } // namespace linalg

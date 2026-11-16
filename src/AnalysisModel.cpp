@@ -171,3 +171,54 @@ linalg::MatrixX AnalysisModel::assembleElasticStiffness() const {
     }
     return K;
 }
+
+AnalysisModel::ReducedSystem AnalysisModel::reduceElasticSystem(const linalg::MatrixX &K) const {
+    const auto n = globalDofCount();
+    if (K.rows() != n || K.cols() != n)
+        throw std::invalid_argument("Global stiffness dimensions do not match the model DOFs");
+    // 01. 统计自由和固定自由度的索引
+    std::vector<std::size_t> freeDofs;
+    std::vector<std::size_t> fixedDofs;
+    for (std::size_t dof = 0; dof < n; ++dof) {
+        if (prescribedDisplacements_[dof].has_value())
+            fixedDofs.push_back(dof); // 记录位移边界条件的全局自由度
+        else
+            freeDofs.push_back(dof); // 记录自由的全局自由度
+    }
+    // 02. 初始化约化系统
+    const auto nFree = freeDofs.size();
+    linalg::MatrixX Kff(nFree, nFree);
+    linalg::VectorX rhs(nFree);
+    // 03. 构建约化系统
+    for (std::size_t i = 0; i < nFree; ++i) {
+        const auto row = freeDofs[i];
+        rhs[i] = forceVector_[row]; // 取出该方向的力值, 作为右端项初值
+        for (const auto col : fixedDofs)
+            rhs[i] -= K(row, col) * prescribedDisplacements_[col].value();
+        for (std::size_t j = 0; j < nFree; ++j)
+            Kff(i, j) = K(row, freeDofs[j]);
+    }
+    return {std::move(Kff), std::move(rhs), std::move(freeDofs)};
+}
+
+AnalysisModel::LinearStaticResult AnalysisModel::solveLinearStatic(const linalg::MatrixX &K) const {
+    const auto reduced = reduceElasticSystem(K);
+    const auto uFree = linalg::solveCholesky(reduced.stiffness, reduced.rhs);
+    const auto n = globalDofCount();
+    LinearStaticResult result{linalg::VectorX(n, 0.0), linalg::VectorX(n, 0.0)};
+    for (std::size_t dof = 0; dof < n; ++dof) {
+        if (const auto &prescribed = prescribedDisplacements_[dof]; prescribed.has_value())
+            result.displacements[dof] = *prescribed;
+    }
+    for (std::size_t i = 0; i < uFree.size(); ++i)
+        result.displacements[reduced.freeDofs[i]] = uFree[i];
+    for (std::size_t row = 0; row < n; ++row) {
+        if (!prescribedDisplacements_[row].has_value())
+            continue;
+        double reaction = -forceVector_[row];
+        for (std::size_t col = 0; col < n; ++col)
+            reaction += K(row, col) * result.displacements[col];
+        result.reactions[row] = reaction;
+    }
+    return result;
+}

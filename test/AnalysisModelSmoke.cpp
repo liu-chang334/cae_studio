@@ -53,6 +53,32 @@ int main(int argc, char *argv[]) {
     }
 
     try {
+        FEModel smallModel;
+        smallModel.mesh.nodes = {{42, {0.0, 0.0, 0.0}}};
+        smallModel.nodeSets["node"] = {42};
+        smallModel.boundaries.push_back({"node", 2, 2.0});
+        smallModel.loads.push_back({"node", 1, 10.0});
+        smallModel.loads.push_back({"node", 2, 1.0});
+        smallModel.loads.push_back({"node", 3, 7.0});
+
+        linalg::MatrixX smallK(3, 3);
+        smallK(0, 0) = 4.0;
+        smallK(1, 1) = 8.0;
+        smallK(2, 2) = 5.0;
+        smallK(0, 1) = smallK(1, 0) = -3.0;
+        smallK(0, 2) = smallK(2, 0) = 1.0;
+        smallK(1, 2) = smallK(2, 1) = 2.0;
+
+        const AnalysisModel smallAnalysis(smallModel);
+        const auto solution = smallAnalysis.solveLinearStatic(smallK);
+        const auto &u = solution.displacements;
+        const auto &R = solution.reactions;
+        constexpr double smallTol = 1e-12;
+
+        if (!(std::abs(u[0] - 77.0 / 19.0) <= smallTol && u[1] == 2.0 && std::abs(u[2] + 4.0 / 19.0) <= smallTol &&
+              std::abs(R[1] - 46.0 / 19.0) <= smallTol)) {
+            throw std::runtime_error("Unexpected linear static displacement or reaction");
+        }
         const auto result = AbaqusInpReader{}.read(argv[1]);
         if (!result.success())
             throw std::runtime_error(result.error);
@@ -90,6 +116,21 @@ int main(int argc, char *argv[]) {
         const double tolerance = 1e-6 + 1e-10 * std::abs(expected);
         if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
             throw std::runtime_error("Shared node stiffness was not assembled correctly");
+
+        const auto jobSolution = analysis.solveLinearStatic(K);
+        const auto &forces = analysis.forceVector();
+        double appliedY = 0.0;
+        double reactionY = 0.0;
+        for (std::size_t dof = 1; dof < forces.size(); dof += 3) {
+            appliedY += forces[dof];
+            reactionY += jobSolution.reactions[dof];
+        }
+
+        if (appliedY != -78000.0 || !(std::abs(appliedY + reactionY) <= 1e-3)) {
+            throw std::runtime_error("job1: y-direction force balance failed (applied = " + std::to_string(appliedY) +
+                                     ", reaction = " + std::to_string(reactionY) + ")");
+        }
+
         std::cout << "AnalysisModel smoke test passed\n";
         return 0;
     } catch (const std::exception &error) {
