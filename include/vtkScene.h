@@ -92,9 +92,10 @@ private:
     void highlightNode(vtkIdType pointId);
 
     /**
-     * @brief 构建边线波纹
+     * @brief 构建普通边线和波纹
+     * @param showImmediately 是否在构建后立即显示边线和波纹
      */
-    void buildEdgeWave();
+    void buildMeshEdges(bool showImmediately);
 
 private:
     /// @brief 渲染器

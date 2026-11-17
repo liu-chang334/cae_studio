@@ -69,12 +69,13 @@ MeshViewport::~MeshViewport() {
 void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     if (!grid)
         return;
-    edgeAnimation_->stop();             // 停止边线传播动画
-    importAnimation_->stop();           // 停止导入动画
-    scene_->setMesh(grid, showResults); // 设置场景网格, 并初始化导入进度为0
-    renderWindow()->Render();           // 刷新场景
-    importAnimation_->start();          // 启动导入动画
-    if (!showResults)
+    edgeAnimation_->stop();
+    importAnimation_->stop();
+    scene_->setMesh(grid, showResults);
+    renderWindow()->Render();
+    if (showResults)
+        edgeAnimation_->start();
+    else
         importAnimation_->start();
 }
 

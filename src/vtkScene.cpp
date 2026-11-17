@@ -50,7 +50,6 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     // 2.1 装填映射器
     auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
     mapper->SetInputData(grid);
-    // mapper->ScalarVisibilityOff();
     auto *magnitude = showResults ? grid->GetPointData()->GetArray("DisplacementMagnitude") : nullptr;
     if (magnitude) {
         double range[2];
@@ -81,6 +80,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     grid_ = grid;
     meshActor_ = actor;
     renderer_->AddActor(meshActor_);
+    buildMeshEdges(showResults);
     if (magnitude) {
         meshActor_->GetProperty()->LightingOff();
         scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
@@ -90,8 +90,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
         scalarBar_->GetLabelTextProperty()->SetColor(0.0, 0.0, 0.0);
         renderer_->AddActor2D(scalarBar_);
     } else {
-        buildEdgeWave();
-        setMeshRevealProgress(0.0);
+        setMeshRevealProgress(showResults ? 1.0 : 0.0);
     }
     // 6. 重置相机
     resetCamera();
@@ -214,11 +213,6 @@ void vtkScene::highlightNode(vtkIdType pointId) {
     renderer_->AddActor(highlightActor_);
 }
 
-// void vtkScene::setMeshOpacity(double opacity) {
-//     if (meshActor_)
-//         meshActor_->GetProperty()->SetOpacity(opacity);
-// }
-
 void vtkScene::setMeshRevealProgress(double progress) {
     if (!meshActor_)
         return;
@@ -250,7 +244,7 @@ void vtkScene::setMeshRevealProgress(double progress) {
     }
 }
 
-void vtkScene::buildEdgeWave() {
+void vtkScene::buildMeshEdges(bool showImmediately) {
     // 1. 提取所有边线
     auto extract = vtkSmartPointer<vtkExtractEdges>::New();
     extract->SetInputData(grid_);
@@ -311,8 +305,8 @@ void vtkScene::buildEdgeWave() {
     edgeActor_->GetProperty()->SetColor(0.0, 0.0, 0.0); // rgb(0,0,0)
     edgeActor_->GetProperty()->SetLineWidth(1.5);
     edgeActor_->GetProperty()->LightingOff();
-    edgeActor_->PickableOff();   // 禁止此装饰性边线参与拾取
-    edgeActor_->VisibilityOff(); // 初始时隐藏, 后续由导入动画控制
+    edgeActor_->PickableOff(); // 禁止此装饰性边线参与拾取
+    edgeActor_->SetVisibility(showImmediately);
     renderer_->AddActor(edgeActor_);
     // 5. 创建波纹actor
     const int segments = static_cast<int>(std::clamp<vtkIdType>(200000 / edges->GetNumberOfLines(), 2, 24));
@@ -388,8 +382,8 @@ void vtkScene::buildEdgeWave() {
                                        "//VTK::PositionVC::Impl\n"
                                        "#undef vertexMC\n",
                                        false);
-    edgeWaveActor_->PickableOff();   // 禁止此装饰性波纹参与拾取
-    edgeWaveActor_->VisibilityOff(); // 初始时隐藏, 后续由导入动画控制
+    edgeWaveActor_->PickableOff(); // 禁止此装饰性波纹参与拾取
+    edgeWaveActor_->SetVisibility(showImmediately);
     renderer_->AddActor(edgeWaveActor_);
 }
 
