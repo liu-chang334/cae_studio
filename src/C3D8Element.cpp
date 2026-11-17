@@ -151,3 +151,23 @@ linalg::MatrixX C3D8Element::computeElasticStiffness() const {
     }
     return ke;
 }
+
+std::array<IntegrationPointState, 8> C3D8Element::recoverElasticState(const linalg::Vector<24> &elementDisplacements) const {
+    std::array<IntegrationPointState, 8> states{};
+    const auto &D = material_->initialElasticMatrix(); // 取弹性本构矩阵
+    for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
+        const auto &Bbar = geometry_[gp].Bbar; // 取当前积分点的缓存几何信息
+        auto &state = states[gp];              // 取当前积分点的状态
+        // 计算应变
+        for (std::size_t row = 0; row < state.strain.size(); ++row) {
+            for (std::size_t col = 0; col < elementDisplacements.size(); ++col)
+                state.strain[row] += Bbar[row][col] * elementDisplacements[col]; // NOTE: 可以优化为矩阵向量乘法函数
+        }
+        // 计算应力
+        for (std::size_t row = 0; row < state.stress.size(); ++row) {
+            for (std::size_t col = 0; col < state.strain.size(); ++col)
+                state.stress[row] += D[row][col] * state.strain[col];
+        }
+    }
+    return states;
+}

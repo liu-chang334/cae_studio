@@ -30,6 +30,14 @@ public:
      */
     linalg::MatrixX computeElasticStiffness() const override; // NOTE: 后续扩展成弹塑性统一接口
 
+    /**
+     * @brief 从单元位移恢复积分点状态
+     * @param[in] elementDisplacements 单元位移向量, 维度为24
+     * @return 积分点状态数组, 每个元素为积分点状态结构体
+     * @details 每个积分点的状态包括应变和应变
+     */
+    std::array<IntegrationPointState, 8> recoverElasticState(const linalg::Vector<24> &elementDisplacements) const;
+
 private:
     /**
      * @brief 积分点几何信息
