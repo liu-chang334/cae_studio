@@ -66,14 +66,16 @@ MeshViewport::~MeshViewport() {
     delete scene_;
 }
 
-void MeshViewport::setMesh(vtkUnstructuredGrid *grid) {
+void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     if (!grid)
         return;
-    edgeAnimation_->stop();    // 停止边线传播动画
-    importAnimation_->stop();  // 停止导入动画
-    scene_->setMesh(grid);     // 设置场景网格, 并初始化导入进度为0
-    renderWindow()->Render();  // 刷新场景
-    importAnimation_->start(); // 启动导入动画
+    edgeAnimation_->stop();             // 停止边线传播动画
+    importAnimation_->stop();           // 停止导入动画
+    scene_->setMesh(grid, showResults); // 设置场景网格, 并初始化导入进度为0
+    renderWindow()->Render();           // 刷新场景
+    importAnimation_->start();          // 启动导入动画
+    if (!showResults)
+        importAnimation_->start();
 }
 
 void MeshViewport::clear() {

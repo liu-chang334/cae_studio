@@ -1,6 +1,7 @@
 #include "vtkBuilder.h"
 
 #include <vtkCellData.h>
+#include <vtkDoubleArray.h>
 #include <vtkPointData.h>
 
 vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
@@ -71,5 +72,29 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     }
     grid->GetCellData()->AddArray(elementIds);
     result.grid = grid;
+    return result;
+}
+
+vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisModel &analysis,
+                                        const AnalysisModel::LinearStaticResult &solution) const {
+    auto result = build(mesh);
+    if (!result.success())
+        return result;
+    if (solution.displacements.size() != analysis.globalDofCount())
+        return {nullptr, "全局位移向量维度与自由度数量不一致"};
+    auto displacements = vtkSmartPointer<vtkDoubleArray>::New();
+    displacements->SetName("Displacements");
+    displacements->SetNumberOfComponents(3);
+    auto magnitude = vtkSmartPointer<vtkDoubleArray>::New();
+    magnitude->SetName("DisplacementMagnitude");
+    magnitude->SetNumberOfComponents(1);
+    for (const auto &node : mesh.nodes) {
+        const auto dof = analysis.globalDofIndex(node.id, 1);
+        const double *u = solution.displacements.data() + dof;
+        displacements->InsertNextTypedTuple(u);
+        magnitude->InsertNextValue(std::hypot(u[0], u[1], u[2]));
+    }
+    result.grid->GetPointData()->SetVectors(displacements);
+    result.grid->GetPointData()->AddArray(magnitude);
     return result;
 }

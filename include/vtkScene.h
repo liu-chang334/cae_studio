@@ -8,6 +8,7 @@
 class vtkActor;
 class vtkRenderer;
 class vtkUnstructuredGrid;
+class vtkScalarBarActor;
 
 /**
  * @brief vtk场景类
@@ -27,9 +28,10 @@ public:
     /**
      * @brief 设置网格
      * @param grid 网格指针
+     * @param showResults 是否显示求解结果
      * @details 显示网格, 并重置导入动画进度为0
      */
-    void setMesh(vtkUnstructuredGrid *grid);
+    void setMesh(vtkUnstructuredGrid *grid, bool showResults = false);
 
     // void setMeshOpacity(double opacity);
 
@@ -101,6 +103,8 @@ private:
     vtkSmartPointer<vtkActor> meshActor_;
     /// @brief 网格
     vtkSmartPointer<vtkUnstructuredGrid> grid_;
+    /// @brief 标量对象
+    vtkSmartPointer<vtkScalarBarActor> scalarBar_;
     /// @brief 高亮对象
     /// @details 用于高亮单元或节点, 选中后显示高亮框
     vtkSmartPointer<vtkActor> highlightActor_;

@@ -23,6 +23,7 @@ set(CMAKE_PREFIX_PATH
 # 查找 Qt 库
 find_package(Qt6 CONFIG REQUIRED COMPONENTS
   Widgets
+  Concurrent
   OpenGLWidgets
 )
 find_package(VTK CONFIG REQUIRED COMPONENTS
@@ -77,6 +78,7 @@ target_link_libraries(CAEStudio PRIVATE
   CAEMath # 链接公共矩阵运算库
   
   Qt6::Widgets
+  Qt6::Concurrent
   Qt6::OpenGLWidgets
   VTK::GUISupportQt
   VTK::RenderingOpenGL2

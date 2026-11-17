@@ -17,6 +17,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkExtractCells.h>
 #include <vtkExtractEdges.h>
+#include <vtkLookupTable.h>
 #include <vtkOrientationMarkerWidget.h>
 #include <vtkPointData.h>
 #include <vtkPointPicker.h>
@@ -25,7 +26,9 @@
 #include <vtkPolyDataMapper.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
+#include <vtkScalarBarActor.h>
 #include <vtkShaderProperty.h>
+#include <vtkTextProperty.h>
 #include <vtkTubeFilter.h>
 #include <vtkTypeInt64Array.h>
 #include <vtkUniforms.h>
@@ -41,13 +44,29 @@ vtkScene::vtkScene() : renderer_(vtkSmartPointer<vtkRenderer>::New()) {
 
 vtkRenderer *vtkScene::renderer() const { return renderer_.GetPointer(); }
 
-void vtkScene::setMesh(vtkUnstructuredGrid *grid) {
+void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     if (!grid) // 1. 空网格直接返回
         return;
     // 2.1 装填映射器
     auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
     mapper->SetInputData(grid);
-    mapper->ScalarVisibilityOff();
+    // mapper->ScalarVisibilityOff();
+    auto *magnitude = showResults ? grid->GetPointData()->GetArray("DisplacementMagnitude") : nullptr;
+    if (magnitude) {
+        double range[2];
+        magnitude->GetRange(range);
+        auto colors = vtkSmartPointer<vtkLookupTable>::New();
+        colors->SetHueRange(2.0 / 3.0, 0.0); // 蓝色为小值，红色为大值
+        colors->SetTableRange(range);
+        colors->Build();
+        mapper->SetLookupTable(colors);
+        mapper->UseLookupTableScalarRangeOn();
+        mapper->SetScalarModeToUsePointFieldData();
+        mapper->SelectColorArray("DisplacementMagnitude");
+        mapper->InterpolateScalarsBeforeMappingOn();
+        mapper->ScalarVisibilityOn();
+    } else
+        mapper->ScalarVisibilityOff();
     // 2.2 装填场景对象
     auto actor = vtkSmartPointer<vtkActor>::New();
     actor->SetMapper(mapper);
@@ -62,10 +81,18 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid) {
     grid_ = grid;
     meshActor_ = actor;
     renderer_->AddActor(meshActor_);
-    // 4. 构建边线波纹对象
-    buildEdgeWave();
-    // 5. 设置网格颜色渐变进度为0, 即不显示
-    setMeshRevealProgress(0.0);
+    if (magnitude) {
+        meshActor_->GetProperty()->LightingOff();
+        scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
+        scalarBar_->SetLookupTable(mapper->GetLookupTable());
+        scalarBar_->SetTitle("|U|");
+        scalarBar_->GetTitleTextProperty()->SetColor(0.0, 0.0, 0.0);
+        scalarBar_->GetLabelTextProperty()->SetColor(0.0, 0.0, 0.0);
+        renderer_->AddActor2D(scalarBar_);
+    } else {
+        buildEdgeWave();
+        setMeshRevealProgress(0.0);
+    }
     // 6. 重置相机
     resetCamera();
 }
@@ -80,6 +107,10 @@ void vtkScene::clear() {
         renderer_->RemoveActor(edgeActor_);
     if (edgeWaveActor_)
         renderer_->RemoveActor(edgeWaveActor_);
+    if (scalarBar_) {
+        renderer_->RemoveActor2D(scalarBar_);
+        scalarBar_ = nullptr;
+    }
     // 3. 重置持有的所有指针
     meshActor_ = nullptr;
     grid_ = nullptr;

@@ -26,7 +26,7 @@ public:
      * @param grid 网格数据
      * @details 显示网格, 并开始导入动画
      */
-    void setMesh(vtkUnstructuredGrid *grid);
+    void setMesh(vtkUnstructuredGrid *grid, bool showResults = false);
 
     /**
      * @brief 清除网格, 停止所有动画

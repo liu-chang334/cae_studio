@@ -231,6 +231,9 @@ void MainWindow::setupToolBar() {
     auto *pickNodeAction = toolBar_->addAction(tr("选节点"));
     pickNodeAction->setCheckable(true);
     connect(pickNodeAction, &QAction::toggled, viewport_, &MeshViewport::setNodePickingEnabled);
+
+    auto *action = toolBar_->addAction(tr("求解并显示位移"));
+    connect(action, &QAction::triggered, this, &MainWindow::onShowDisplacement);
 }
 
 void MainWindow::onOpenFile() {
@@ -287,4 +290,38 @@ void MainWindow::onOpenFile() {
     //                                         .arg(elastic.poissonRatio, 0, 'g', 12));
     //     }
     // }
+}
+
+void MainWindow::onShowDisplacement() {
+    if (currentModel_.mesh.elements.empty()) {
+        logWidget_->appendPlainText(tr("请先打开一个 INP 模型。"));
+        return;
+    }
+    auto *watcher = new QFutureWatcher<vtkBuildResult>(this);
+    connect(watcher, &QFutureWatcher<vtkBuildResult>::finished, this, [this, watcher] {
+        const auto result = watcher->result();
+        watcher->deleteLater();
+        toolBar_->setEnabled(true);
+
+        if (!result.success()) {
+            logWidget_->appendPlainText(result.error);
+            return;
+        }
+
+        viewport_->setMesh(result.grid, true);
+        infoTable_->setRowCount(0);
+        logWidget_->appendPlainText(tr("已显示节点位移模长。"));
+    });
+    toolBar_->setEnabled(false);
+    logWidget_->appendPlainText(tr("正在求解…"));
+    watcher->setFuture(QtConcurrent::run([model = currentModel_]() -> vtkBuildResult {
+        try {
+            const AnalysisModel analysis(model);
+            const auto stiffness = analysis.assembleElasticStiffness();
+            const auto solution = analysis.solveLinearStatic(stiffness);
+            return vtkBuilder{}.buildResults(model.mesh, analysis, solution);
+        } catch (const std::exception &error) {
+            return {nullptr, QString::fromUtf8(error.what())};
+        }
+    }));
 }

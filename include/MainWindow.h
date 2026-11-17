@@ -3,6 +3,7 @@
 #include "FEModel.h"
 
 #include <QFileDialog>
+#include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPlainTextEdit>
 #include <QSplitter>
@@ -10,6 +11,7 @@
 #include <QToolBar>
 #include <QTreeWidget>
 #include <QVTKOpenGLNativeWidget.h>
+#include <QtConcurrentRun>
 
 class MeshViewport;
 
@@ -39,6 +41,11 @@ private slots:
      * @brief 打开文件槽函数
      */
     void onOpenFile();
+
+    /**
+     * @brief 显示位移槽函数
+     */
+    void onShowDisplacement();
 
     /// @brief 切换线框模式
     /// @param checked true 表示启用,false 表示关闭
