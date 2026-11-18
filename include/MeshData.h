@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-using MeshId = std::int64_t; // 源网格或源节点id
+using MeshId = std::int64_t;  // 源网格或源节点id
 
 /**
  * @brief 网格节点
@@ -25,8 +25,8 @@ enum class ElementFormulation { Unspecified, C3D8, C3D8R };
 struct MeshElement {
     MeshId id;
     std::vector<MeshId> nodeIds;
-    CellTopology topology = CellTopology::Unknown;                    // 单元拓扑类型
-    ElementFormulation formulation = ElementFormulation::Unspecified; // 单元分析类型
+    CellTopology topology = CellTopology::Unknown;  // 单元拓扑类型
+    ElementFormulation formulation = ElementFormulation::Unspecified;  // 单元分析类型
 };
 
 /**

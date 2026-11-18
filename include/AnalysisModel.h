@@ -22,17 +22,17 @@ public:
      * @brief 约化后的求解系统
      */
     struct ReducedSystem {
-        linalg::MatrixX stiffness;         // K_ff
-        linalg::VectorX rhs;               // F_f - K_fc * u_c
-        std::vector<std::size_t> freeDofs; // 约化下标 -> 全局下标
+        linalg::MatrixX stiffness;  // K_ff
+        linalg::VectorX rhs;  // F_f - K_fc * u_c
+        std::vector<std::size_t> freeDofs;  // 约化下标 -> 全局下标
     };
 
     /**
      * @brief 线性静力分析结果
      */
     struct LinearStaticResult {
-        linalg::VectorX displacements; // 全局位移
-        linalg::VectorX reactions;     // 约束反力
+        linalg::VectorX displacements;  // 全局位移
+        linalg::VectorX reactions;  // 约束反力
     };
 
     /**
@@ -118,8 +118,8 @@ private:
      * @details 包含单元指针和源id
      */
     struct Entry {
-        std::unique_ptr<SolidElement3D> element; // 单元指针
-        std::optional<MeshId> sourceId;          // 源网格或源节点id
+        std::unique_ptr<SolidElement3D> element;  // 单元指针
+        std::optional<MeshId> sourceId;  // 源网格或源节点id
     };
 
     /**

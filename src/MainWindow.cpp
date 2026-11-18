@@ -26,11 +26,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 void MainWindow::setupModelPanel() {
     /// 创建树控件, this为父对象
     modelTree_ = new QTreeWidget(this);
-    modelTree_->setColumnCount(2);                       // 设置列数
-    QStringList headers = {tr("项目"), tr("数量 / 值")}; // 表头
-    modelTree_->setHeaderLabels(headers);                // 设置表头
-    modelTree_->setColumnWidth(0, 180);                  // 设置第一列宽度
-    modelTree_->setColumnWidth(1, 20);                   // 设置第二列宽度
+    modelTree_->setColumnCount(2);  // 设置列数
+    QStringList headers = {tr("项目"), tr("数量 / 值")};  // 表头
+    modelTree_->setHeaderLabels(headers);  // 设置表头
+    modelTree_->setColumnWidth(0, 180);  // 设置第一列宽度
+    modelTree_->setColumnWidth(1, 20);  // 设置第二列宽度
     // 创建根节点
     QTreeWidgetItem *root_item = new QTreeWidgetItem(modelTree_);
     root_item->setText(0, "Model-1");
@@ -96,15 +96,15 @@ void MainWindow::updateModelTree() {
     nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.nodes.size())));
     elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.elements.size())));
     while (nsetItem_->childCount() > 0)
-        delete nsetItem_->takeChild(0); // 删除旧模型节点集条目
+        delete nsetItem_->takeChild(0);  // 删除旧模型节点集条目
     while (esetItem_->childCount() > 0)
-        delete esetItem_->takeChild(0); // 删除旧模型单元集条目
+        delete esetItem_->takeChild(0);  // 删除旧模型单元集条目
     while (loadItem_->childCount() > 0)
-        delete loadItem_->takeChild(0); // 删除旧模型荷载条目
+        delete loadItem_->takeChild(0);  // 删除旧模型荷载条目
     while (boundaryItem_->childCount() > 0)
-        delete boundaryItem_->takeChild(0); // 删除旧模型边界条件条目
+        delete boundaryItem_->takeChild(0);  // 删除旧模型边界条件条目
     while (materialItem_->childCount() > 0)
-        delete materialItem_->takeChild(0); // 删除旧模型材料条目
+        delete materialItem_->takeChild(0);  // 删除旧模型材料条目
     nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.nodeSets.size())));
     esetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.elemSets.size())));
     loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentModel_.loads.size())));
@@ -217,9 +217,9 @@ void MainWindow::setupLogWidget() {
 }
 
 void MainWindow::setupToolBar() {
-    toolBar_ = addToolBar(tr("Main")); // 添加工具栏
-    toolBar_->setMovable(false);       // 禁用用户拖动
-    toolBar_->setFloatable(false);     // 禁用用户浮动
+    toolBar_ = addToolBar(tr("Main"));  // 添加工具栏
+    toolBar_->setMovable(false);  // 禁用用户拖动
+    toolBar_->setFloatable(false);  // 禁用用户浮动
     // 创建打开文件action
     QAction *actOpen_ = new QAction(tr("Open File"), this);
     actOpen_->setShortcut(QKeySequence::Open);

@@ -38,23 +38,23 @@ MeshViewport::MeshViewport(QWidget *parent) : QVTKOpenGLNativeWidget(parent), sc
     orientationWidget_->InteractiveOff();
     // 导入动画配置
     importAnimation_ = new QVariantAnimation(this);
-    importAnimation_->setDuration(1800);                        // 动画持续时间, ms
-    importAnimation_->setStartValue(0.0);                       // 动画起始值
-    importAnimation_->setEndValue(1.0);                         // 动画结束值
-    importAnimation_->setEasingCurve(QEasingCurve::InOutCubic); // 动画曲线
+    importAnimation_->setDuration(1800);  // 动画持续时间, ms
+    importAnimation_->setStartValue(0.0);  // 动画起始值
+    importAnimation_->setEndValue(1.0);  // 动画结束值
+    importAnimation_->setEasingCurve(QEasingCurve::InOutCubic);  // 动画曲线
     connect(importAnimation_, &QVariantAnimation::valueChanged, this,
-            &MeshViewport::updateImportProgress); // 连接导入动画进度更新信号
+            &MeshViewport::updateImportProgress);  // 连接导入动画进度更新信号
     // 边线传播动画，相位匀速推进并无缝循环
     edgeAnimation_ = new QVariantAnimation(this);
     edgeAnimation_->setDuration(6000);
     edgeAnimation_->setStartValue(0.0);
     edgeAnimation_->setEndValue(1.0);
-    edgeAnimation_->setLoopCount(-1); // 无限循环
+    edgeAnimation_->setLoopCount(-1);  // 无限循环
     edgeAnimation_->setEasingCurve(QEasingCurve::Linear);
     connect(edgeAnimation_, &QVariantAnimation::valueChanged, this,
-            &MeshViewport::updateEdgeProgress); // 连接边线传播动画更新信号
+            &MeshViewport::updateEdgeProgress);  // 连接边线传播动画更新信号
     connect(importAnimation_, &QVariantAnimation::finished, edgeAnimation_,
-            [this]() { edgeAnimation_->start(); }); // 把边线动画开始和导入结束衔接
+            [this]() { edgeAnimation_->start(); });  // 把边线动画开始和导入结束衔接
 }
 
 MeshViewport::~MeshViewport() {
@@ -80,15 +80,15 @@ void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
 }
 
 void MeshViewport::clear() {
-    edgeAnimation_->stop();   // 停止边线传播动画
-    importAnimation_->stop(); // 停止导入动画
-    scene_->clear();          // 清除场景
-    renderWindow()->Render(); // 刷新场景
+    edgeAnimation_->stop();  // 停止边线传播动画
+    importAnimation_->stop();  // 停止导入动画
+    scene_->clear();  // 清除场景
+    renderWindow()->Render();  // 刷新场景
 }
 
 void MeshViewport::resetCamera() {
-    scene_->resetCamera();    // 重置相机
-    renderWindow()->Render(); // 刷新场景
+    scene_->resetCamera();  // 重置相机
+    renderWindow()->Render();  // 刷新场景
 }
 
 void MeshViewport::mousePressEvent(QMouseEvent *event) {
@@ -138,7 +138,7 @@ void MeshViewport::mouseReleaseEvent(QMouseEvent *event) {
         return;
     }
     const auto elementId = scene_->pickElement(x, y);
-    renderWindow()->Render(); // 刷新渲染, 高亮选中单元
+    renderWindow()->Render();  // 刷新渲染, 高亮选中单元
     if (elementId)
         emit elementPicked(*elementId);
     else
@@ -156,16 +156,16 @@ void MeshViewport::setNodePickingEnabled(bool enabled) {
 
 void MeshViewport::updateImportProgress(const QVariant &value) {
     const double progress = value.toDouble();
-    scene_->setMeshRevealProgress(progress); // 更新导入进度
-    renderWindow()->Render();                // 刷新渲染
+    scene_->setMeshRevealProgress(progress);  // 更新导入进度
+    renderWindow()->Render();  // 刷新渲染
 }
 
 void MeshViewport::updateEdgeProgress(const QVariant &value) {
-    const double phase = value.toDouble(); // 获取当前相位
+    const double phase = value.toDouble();  // 获取当前相位
     double ramp = 1.0;
     if (edgeAnimation_->currentLoop() == 0)
-        ramp = std::min(phase / 0.12, 1.0);                   // 首轮幅度渐强
-    const double strength = ramp * ramp * (3.0 - 2.0 * ramp); // 稳定后恒为1
+        ramp = std::min(phase / 0.12, 1.0);  // 首轮幅度渐强
+    const double strength = ramp * ramp * (3.0 - 2.0 * ramp);  // 稳定后恒为1
     scene_->setEdgeWavePhase(phase, strength);
     renderWindow()->Render();
 }

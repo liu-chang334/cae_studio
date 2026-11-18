@@ -44,7 +44,7 @@ void checkElement(const AnalysisModel &analysis, std::size_t elementNumber, Mesh
     }
 }
 
-} // namespace
+}  // namespace
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -101,8 +101,8 @@ int main(int argc, char *argv[]) {
             sparseAnalysis.globalDofIndex(10, 3) != 5) {
             throw std::runtime_error("Unexpected DOF numbering for nonconsecutive node IDs");
         }
-        checkElement(analysis, 300, 300, {2.1e9, 0.003}); // Mat-1
-        checkElement(analysis, 301, 301, {3.2e9, 0.002}); // Mat-2
+        checkElement(analysis, 300, 300, {2.1e9, 0.003});  // Mat-1
+        checkElement(analysis, 301, 301, {3.2e9, 0.002});  // Mat-2
         const auto K = analysis.assembleElasticStiffness();
         if (K.rows() != 2808 || K.cols() != 2808)
             throw std::runtime_error("Unexpected global stiffness dimensions");

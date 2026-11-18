@@ -38,13 +38,13 @@ double determinant_3x3(const Matrix<3, 3> &matrix) {
 
 Matrix<3, 3> inverse_3x3(const Matrix<3, 3> &matrix) {
     const double det = determinant_3x3(matrix);
-    if (!std::isfinite(det) || det == 0.0) // 检查行列式是否为0或非有限数
+    if (!std::isfinite(det) || det == 0.0)  // 检查行列式是否为0或非有限数
         throw std::domain_error("Matrix determinant is zero or non-finite");
     Matrix<3, 3> result = adjugate_3x3(matrix);
     for (auto &row : result) {
         for (double &value : row) {
             value /= det;
-            if (!std::isfinite(value)) // 检查逆矩阵是否包含非有限数
+            if (!std::isfinite(value))  // 检查逆矩阵是否包含非有限数
                 throw std::overflow_error("Inverse contains a non-finite value");
         }
     }
@@ -82,9 +82,9 @@ VectorX solveCholesky(const MatrixX &A, const VectorX &rhs) {
         const auto row = i - 1;
         double value = y[row];
         for (std::size_t j = row + 1; j < n; ++j)
-            value -= L(j, row) * x[j]; // L^T(row, j) = L(j, row)
+            value -= L(j, row) * x[j];  // L^T(row, j) = L(j, row)
         x[row] = value / L(row, row);
     }
     return x;
 }
-} // namespace linalg
+}  // namespace linalg

@@ -114,4 +114,4 @@ Matrix<3, 3> inverse_3x3(const Matrix<3, 3> &matrix);
  * @return 解向量
  */
 VectorX solveCholesky(const MatrixX &A, const VectorX &rhs);
-} // namespace linalg
+}  // namespace linalg

@@ -68,7 +68,7 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
             conn.push_back(it->second);
         }
         grid->InsertNextCell(vtkCellType, static_cast<vtkIdType>(conn.size()), conn.data());
-        elementIds->InsertNextValue(static_cast<vtkTypeInt64>(element.id)); // 保留原始单元号
+        elementIds->InsertNextValue(static_cast<vtkTypeInt64>(element.id));  // 保留原始单元号
     }
     grid->GetCellData()->AddArray(elementIds);
     result.grid = grid;
@@ -90,11 +90,11 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisMode
     magnitude->SetNumberOfComponents(1);
     for (const auto &node : mesh.nodes) {
         const auto dof = analysis.globalDofIndex(node.id, 1);
-        const double *u = solution.displacements.data() + dof;    // data()返回首元地址
-        displacements->InsertNextTypedTuple(u);                   // 根据提前设定的分量宽度依次读取
-        magnitude->InsertNextValue(std::hypot(u[0], u[1], u[2])); // 计算模长并存入数组
+        const double *u = solution.displacements.data() + dof;  // data()返回首元地址
+        displacements->InsertNextTypedTuple(u);  // 根据提前设定的分量宽度依次读取
+        magnitude->InsertNextValue(std::hypot(u[0], u[1], u[2]));  // 计算模长并存入数组
     }
-    result.grid->GetPointData()->SetVectors(displacements); // 登记为向量数据
-    result.grid->GetPointData()->AddArray(magnitude);       // 登记为标量数据
+    result.grid->GetPointData()->SetVectors(displacements);  // 登记为向量数据
+    result.grid->GetPointData()->AddArray(magnitude);  // 登记为标量数据
     return result;
 }

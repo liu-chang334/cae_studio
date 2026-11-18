@@ -14,7 +14,7 @@ const std::vector<MeshId> &nodeIdsInSet(const FEModel &model, const std::string 
         throw std::invalid_argument("Unknown or empty node set: " + setName);
     return set->second;
 }
-} // namespace
+}  // namespace
 
 std::size_t AnalysisModel::addElement(std::unique_ptr<SolidElement3D> element, std::optional<MeshId> sourceId) {
     if (!element)
@@ -47,18 +47,18 @@ std::shared_ptr<const Material3D> resolveMaterial(MeshId elementId, const FEMode
                                                   const std::unordered_map<std::string, const MaterialData *> &materialsByName,
                                                   std::unordered_map<std::string, std::shared_ptr<const Material3D>> &materialCache) {
     const std::string label = "Element" + std::to_string(elementId);
-    const auto assignment = model.materialNameByElementId.find(elementId); // 源单元id->材料名
+    const auto assignment = model.materialNameByElementId.find(elementId);  // 源单元id->材料名
     if (assignment == model.materialNameByElementId.end())
         throw std::invalid_argument(label + " has no material assignment");
     const std::string &name = assignment->second;
-    const auto cached = materialCache.find(name); // 材料名->已缓存材料
+    const auto cached = materialCache.find(name);  // 材料名->已缓存材料
     if (cached != materialCache.end())
-        return cached->second;                          // 已有缓存
-    const auto definition = materialsByName.find(name); // 没有缓存, 材料名->材料数据
-    if (definition == materialsByName.end())            // 找不到指定的材料名
+        return cached->second;  // 已有缓存
+    const auto definition = materialsByName.find(name);  // 没有缓存, 材料名->材料数据
+    if (definition == materialsByName.end())  // 找不到指定的材料名
         throw std::invalid_argument(label + " references unknown material " + name);
     const MaterialData &data = *definition->second;
-    if (!data.elastic) // 如果数据中没有弹性参数
+    if (!data.elastic)  // 如果数据中没有弹性参数
         throw std::invalid_argument(label + " requires a linear elastic material: " + name);
     // 创建新材料实例
     std::shared_ptr<const Material3D> material = std::make_shared<const LinearElasticMaterial>(*data.elastic);
@@ -71,13 +71,13 @@ AnalysisModel::AnalysisModel(const FEModel &model) {
     nodeIndexById_.reserve(model.mesh.nodes.size());
     for (std::size_t i = 0; i < model.mesh.nodes.size(); ++i) {
         const MeshId sourceId = model.mesh.nodes[i].id;
-        if (!nodeIndexById_.emplace(sourceId, i).second) // 检查节点id是否重复
+        if (!nodeIndexById_.emplace(sourceId, i).second)  // 检查节点id是否重复
             throw std::invalid_argument("Duplicate node ID: " + std::to_string(sourceId));
     }
     // 02. 构建材料名->材料地址映射表
     std::unordered_map<std::string, const MaterialData *> materialsByName;
     for (const auto &data : model.materials) {
-        if (!materialsByName.emplace(data.name, &data).second) // 检查材料名是否重复
+        if (!materialsByName.emplace(data.name, &data).second)  // 检查材料名是否重复
             throw std::invalid_argument("Duplicate material name: " + data.name);
     }
     // 03. 构建材料缓存表(首次使用才创建)
@@ -87,7 +87,7 @@ AnalysisModel::AnalysisModel(const FEModel &model) {
     // 04. 根据网格记录创建计算单元, 保留原始单元id
     for (const MeshElement &record : model.mesh.elements) {
         const std::string label = "Element" + std::to_string(record.id);
-        if (!elementIds.insert(record.id).second) // 检查单元id是否重复
+        if (!elementIds.insert(record.id).second)  // 检查单元id是否重复
             throw std::invalid_argument("Duplicate element ID: " + std::to_string(record.id));
         switch (record.formulation) {
         case ElementFormulation::C3D8: {
@@ -159,9 +159,9 @@ linalg::MatrixX AnalysisModel::assembleElasticStiffness() const {
         dofs.reserve(element.dofCount());
         for (const auto &node : element.nodes()) {
             const auto gx = globalDofIndex(node.id, 1);
-            dofs.push_back(gx);     // x
-            dofs.push_back(gx + 1); // y
-            dofs.push_back(gx + 2); // z
+            dofs.push_back(gx);  // x
+            dofs.push_back(gx + 1);  // y
+            dofs.push_back(gx + 2);  // z
         }
         const auto ke = element.computeElasticStiffness();
         for (std::size_t i = 0; i < dofs.size(); ++i) {
@@ -181,9 +181,9 @@ AnalysisModel::ReducedSystem AnalysisModel::reduceElasticSystem(const linalg::Ma
     std::vector<std::size_t> fixedDofs;
     for (std::size_t dof = 0; dof < n; ++dof) {
         if (prescribedDisplacements_[dof].has_value())
-            fixedDofs.push_back(dof); // 记录位移边界条件的全局自由度
+            fixedDofs.push_back(dof);  // 记录位移边界条件的全局自由度
         else
-            freeDofs.push_back(dof); // 记录自由的全局自由度
+            freeDofs.push_back(dof);  // 记录自由的全局自由度
     }
     // 02. 初始化约化系统
     const auto nFree = freeDofs.size();
@@ -192,7 +192,7 @@ AnalysisModel::ReducedSystem AnalysisModel::reduceElasticSystem(const linalg::Ma
     // 03. 构建约化系统
     for (std::size_t i = 0; i < nFree; ++i) {
         const auto row = freeDofs[i];
-        rhs[i] = forceVector_[row]; // 取出该方向的力值, 作为右端项初值
+        rhs[i] = forceVector_[row];  // 取出该方向的力值, 作为右端项初值
         for (const auto col : fixedDofs)
             rhs[i] -= K(row, col) * prescribedDisplacements_[col].value();
         for (std::size_t j = 0; j < nFree; ++j)

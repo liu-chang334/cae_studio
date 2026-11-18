@@ -35,9 +35,9 @@ linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsReference(const linalg::V
         const double ri = signs[i][0];
         const double si = signs[i][1];
         const double ti = signs[i][2];
-        gradients[0][i] = 0.125 * ri * (1.0 + si * s) * (1.0 + ti * t); // 对r偏导
-        gradients[1][i] = 0.125 * si * (1.0 + ti * t) * (1.0 + ri * r); // 对s偏导
-        gradients[2][i] = 0.125 * ti * (1.0 + ri * r) * (1.0 + si * s); // 对t偏导
+        gradients[0][i] = 0.125 * ri * (1.0 + si * s) * (1.0 + ti * t);  // 对r偏导
+        gradients[1][i] = 0.125 * si * (1.0 + ti * t) * (1.0 + ri * r);  // 对s偏导
+        gradients[2][i] = 0.125 * ti * (1.0 + ri * r) * (1.0 + si * s);  // 对t偏导
     }
     return gradients;
 }
@@ -101,18 +101,18 @@ void C3D8Element::initializeGeometry() {
     linalg::Matrix<6, 24> averageBvol{};
     // 01. 保存B-Bvol, 累计Bvol的体积积分
     for (std::size_t gp = 0; gp < gaussPoints.size(); ++gp) {
-        const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]); // 对自然坐标偏导
-        const auto jacobian = computeJacobian(referenceGradients, coordinates);          // 雅可比矩阵
+        const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]);  // 对自然坐标偏导
+        const auto jacobian = computeJacobian(referenceGradients, coordinates);  // 雅可比矩阵
         const double detJ = linalg::determinant_3x3(jacobian);
         // 02. 检查雅可比矩阵是否退化
         if (!std::isfinite(detJ) || detJ <= 0.0)
             throw std::domain_error("C3D8 element , Gauss point " + std::to_string(gp + 1) + ": detJ must be finite and positive");
-        const auto globalGradients = computeShapeGradientsGlobal(referenceGradients, jacobian); // 对物理坐标偏导
-        const auto B = computeB(globalGradients);                                               // 组装应变矩阵B
-        const auto Bvol = computeVolumetricB(B);                                                // 组装体积应变矩阵
+        const auto globalGradients = computeShapeGradientsGlobal(referenceGradients, jacobian);  // 对物理坐标偏导
+        const auto B = computeB(globalGradients);  // 组装应变矩阵B
+        const auto Bvol = computeVolumetricB(B);  // 组装体积应变矩阵
         auto &point = geometry_[gp];
-        point.integrationFactor = detJ * weight; // 体积积分因子
-        volume_ += point.integrationFactor;      // 单元体积
+        point.integrationFactor = detJ * weight;  // 体积积分因子
+        volume_ += point.integrationFactor;  // 单元体积
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col) {
                 point.Bbar[row][col] = B[row][col] - Bvol[row][col];
@@ -141,8 +141,8 @@ linalg::MatrixX C3D8Element::computeElasticStiffness() const {
     for (const auto &point : geometry_) {
         const auto &Bbar = point.Bbar;
         // (6×6) × (6×24) → 6×24
-        const auto DB = linalg::multiply(D, Bbar);                                 // 6×24
-        const auto pointStiffness = linalg::multiply(linalg::transpose(Bbar), DB); // 24×24
+        const auto DB = linalg::multiply(D, Bbar);  // 6×24
+        const auto pointStiffness = linalg::multiply(linalg::transpose(Bbar), DB);  // 24×24
         for (std::size_t row = 0; row < ke.rows(); ++row) {
             for (std::size_t col = 0; col < ke.cols(); ++col) {
                 ke(row, col) += pointStiffness[row][col] * point.integrationFactor;
@@ -154,14 +154,14 @@ linalg::MatrixX C3D8Element::computeElasticStiffness() const {
 
 std::array<IntegrationPointState, 8> C3D8Element::recoverElasticState(const linalg::Vector<24> &elementDisplacements) const {
     std::array<IntegrationPointState, 8> states{};
-    const auto &D = material_->initialElasticMatrix(); // 取弹性本构矩阵
+    const auto &D = material_->initialElasticMatrix();  // 取弹性本构矩阵
     for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
-        const auto &Bbar = geometry_[gp].Bbar; // 取当前积分点的缓存几何信息
-        auto &state = states[gp];              // 取当前积分点的状态
+        const auto &Bbar = geometry_[gp].Bbar;  // 取当前积分点的缓存几何信息
+        auto &state = states[gp];  // 取当前积分点的状态
         // 计算应变
         for (std::size_t row = 0; row < state.strain.size(); ++row) {
             for (std::size_t col = 0; col < elementDisplacements.size(); ++col)
-                state.strain[row] += Bbar[row][col] * elementDisplacements[col]; // NOTE: 可以优化为矩阵向量乘法函数
+                state.strain[row] += Bbar[row][col] * elementDisplacements[col];  // NOTE: 可以优化为矩阵向量乘法函数
         }
         // 计算应力
         for (std::size_t row = 0; row < state.stress.size(); ++row) {
