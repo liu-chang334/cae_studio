@@ -14,6 +14,7 @@
 #include <vtkCellPicker.h>
 #include <vtkCellType.h>
 #include <vtkDataSetMapper.h>
+#include <vtkDiscretizableColorTransferFunction.h>
 #include <vtkDoubleArray.h>
 #include <vtkExtractCells.h>
 #include <vtkExtractEdges.h>
@@ -35,9 +36,9 @@
 #include <vtkUnstructuredGrid.h>
 
 vtkScene::vtkScene() : renderer_(vtkSmartPointer<vtkRenderer>::New()) {
-    renderer_->GradientBackgroundOn();        // 渐变背景
+    renderer_->GradientBackgroundOn();  // 渐变背景
     renderer_->SetBackground(1.0, 1.0, 1.0);  // rgb(255,255,255)
-    renderer_->SetBackground2(1.0, 1.0, 1.0); // rgb(255,255,255)
+    renderer_->SetBackground2(1.0, 1.0, 1.0);  // rgb(255,255,255)
     // renderer_->SetBackground(0.043, 0.071, 0.125);
     // renderer_->SetBackground2(0.106, 0.169, 0.251);
 }
@@ -45,25 +46,56 @@ vtkScene::vtkScene() : renderer_(vtkSmartPointer<vtkRenderer>::New()) {
 vtkRenderer *vtkScene::renderer() const { return renderer_.GetPointer(); }
 
 void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
-    if (!grid) // 1. 空网格直接返回
+    if (!grid)  // 1. 空网格直接返回
         return;
+    constexpr int colorLevels = 13;  // 云图与图例共用分级数
     // 2.1 装填映射器
     auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
     mapper->SetInputData(grid);
-    auto *magnitude = showResults ? grid->GetPointData()->GetArray("DisplacementMagnitude") : nullptr;
-    if (magnitude) {
+    vtkDataArray *magnitude = nullptr;
+    if (showResults) {
+        magnitude = grid->GetPointData()->GetArray("DisplacementMagnitude");  // 总位移标量场(节点值)
         double range[2];
-        magnitude->GetRange(range);
-        auto colors = vtkSmartPointer<vtkLookupTable>::New();
-        colors->SetHueRange(2.0 / 3.0, 0.0); // 蓝色为小值，红色为大值
-        colors->SetTableRange(range);
-        colors->Build();
-        mapper->SetLookupTable(colors);
-        mapper->UseLookupTableScalarRangeOn();
-        mapper->SetScalarModeToUsePointFieldData();
-        mapper->SelectColorArray("DisplacementMagnitude");
-        mapper->InterpolateScalarsBeforeMappingOn();
-        mapper->ScalarVisibilityOn();
+        magnitude->GetRange(range);  // 取min和max分别写入range[0]和range[1]
+        const double minValue = range[0];
+        const double maxValue = range[1];
+        const double midValue = minValue + (maxValue - minValue) * 0.5;
+        // 云图方案1: HSV颜色模型, 蓝->绿->红
+        // auto colors = vtkSmartPointer<vtkLookupTable>::New();  // 颜色查找表
+        // colors->SetHueRange(2.0 / 3.0, 0.0);  // HSV色相范围,从蓝色(2/3,0)到红色(0/3,0)
+        // colors->SetTableRange(range);  // 设置场值范围
+        // colors->SetSaturationRange(0.6, 0.6);
+        // colors->SetValueRange(1.0, 1.0);
+        // colors->Build();  // 构建颜色映射关系
+
+        // 云图方案2: 蓝->白->红
+        auto colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
+        colors->SetColorSpaceToLab();
+        const double span = maxValue - minValue;
+        const double colorSaturation = 1.55;  // 颜色浓度：1.0 为原配色，越大越浓。
+        auto addColor = [&](double t, double r, double g, double b) {
+            const double peak = std::max({r, g, b});
+            auto saturate = [&](double channel) { return std::clamp(peak - (peak - channel) * colorSaturation, 0.0, 1.0); };
+            colors->AddRGBPoint(minValue + t * span, saturate(r), saturate(g), saturate(b));
+        };
+        addColor(0.00, 0.25, 0.44, 0.70);  // 柔和蓝
+        addColor(0.20, 0.47, 0.66, 0.82);  // 中蓝
+        addColor(0.40, 0.79, 0.87, 0.93);  // 浅蓝
+        colors->AddRGBPoint(midValue, 0.96, 0.96, 0.95);  // 柔白中心保持不变
+        addColor(0.60, 0.96, 0.84, 0.79);  // 浅红
+        addColor(0.80, 0.87, 0.59, 0.51);  // 中红
+        addColor(1.00, 0.72, 0.32, 0.31);  // 柔和红
+
+        colors->DiscretizeOn();  // 每个数值区间使用固定颜色
+        colors->SetNumberOfValues(colorLevels);
+        colors->Build();  // 颜色控制点设置完成后生成离散色表
+
+        mapper->SetLookupTable(colors);  // 装填颜色关系
+        mapper->UseLookupTableScalarRangeOn();  // 启用
+        mapper->SetScalarModeToUsePointFieldData();  // 使用节点值数据
+        mapper->SelectColorArray("DisplacementMagnitude");  // 具体数组
+        mapper->InterpolateScalarsBeforeMappingOn();  // 启用先插值后映射
+        mapper->ScalarVisibilityOn();  // 启用标量着色
     } else
         mapper->ScalarVisibilityOff();
     // 2.2 装填场景对象
@@ -71,9 +103,9 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     actor->SetMapper(mapper);
     // 2.3 设置场景对象属性
     // actor->GetProperty()->SetColor(10 / 255.0, 108 / 255.0, 85 / 255.0); // 实际由渐变颜色控制
-    actor->GetProperty()->EdgeVisibilityOff();         // 不显示边线
-    actor->GetProperty()->SetEdgeColor(0.0, 0.0, 0.0); // rgb(0, 0, 0)
-    actor->GetProperty()->SetLineWidth(1.5);           // 边线宽度
+    actor->GetProperty()->EdgeVisibilityOff();  // 不显示边线
+    actor->GetProperty()->SetEdgeColor(0.0, 0.0, 0.0);  // rgb(0, 0, 0)
+    actor->GetProperty()->SetLineWidth(1.5);  // 边线宽度
     // 3.1 清除旧对象
     clear();
     // 3.2 替换新对象
@@ -84,10 +116,28 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
     if (magnitude) {
         meshActor_->GetProperty()->LightingOff();
         scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
+        scalarBar_->SetTitle("Total\nDisplacement");
+        scalarBar_->SetOrientationToVertical();
+        scalarBar_->SetPosition(0.87, 0.20);  // 左下角位置，使用视口比例
+        scalarBar_->SetWidth(0.10);  // 整个图例区域宽度，占视口的 10%
+        scalarBar_->SetHeight(0.55);  // 图例区域高度，占视口的 70%
+        scalarBar_->SetBarRatio(0.25);  // 彩色条占图例横向空间的比例
+        scalarBar_->SetMaximumNumberOfColors(colorLevels);  // 与模型云图使用相同的分级数
+        scalarBar_->SetNumberOfLabels(12);  // 数值标签数量，独立于色块数量
+        scalarBar_->UnconstrainedFontSizeOn();  // 使用指定字号
+        scalarBar_->GetTitleTextProperty()->SetFontFamily(VTK_FONT_FILE);
+        scalarBar_->GetTitleTextProperty()->SetFontFile("C:/Windows/Fonts/timesbi.ttf");  // Times New Roman 粗斜体
+        scalarBar_->GetTitleTextProperty()->BoldOn();
+        scalarBar_->GetTitleTextProperty()->ItalicOn();
+        scalarBar_->GetLabelTextProperty()->SetFontFamily(VTK_FONT_FILE);
+        scalarBar_->GetLabelTextProperty()->SetFontFile("C:/Windows/Fonts/timesbi.ttf");
+        scalarBar_->GetLabelTextProperty()->BoldOn();
+        scalarBar_->GetLabelTextProperty()->ItalicOn();
+        scalarBar_->GetTitleTextProperty()->SetFontSize(16);  // 标题字号
+        scalarBar_->GetLabelTextProperty()->SetFontSize(16);  // 数值标签字号
         scalarBar_->SetLookupTable(mapper->GetLookupTable());
-        scalarBar_->SetTitle("|U|");
-        scalarBar_->GetTitleTextProperty()->SetColor(0.0, 0.0, 0.0);
-        scalarBar_->GetLabelTextProperty()->SetColor(0.0, 0.0, 0.0);
+        scalarBar_->GetTitleTextProperty()->SetColor(0.0, 0.0, 0.0);  // 标题颜色
+        scalarBar_->GetLabelTextProperty()->SetColor(0.0, 0.0, 0.0);  // 数值标签颜色
         renderer_->AddActor2D(scalarBar_);
     } else {
         setMeshRevealProgress(showResults ? 1.0 : 0.0);
@@ -127,17 +177,17 @@ std::optional<MeshId> vtkScene::pickElement(int x, int y) {
         return std::nullopt;
     // 3. 选择单元
     auto picker = vtkSmartPointer<vtkCellPicker>::New();
-    picker->AddPickList(meshActor_);                                                                  // 添加场景对象到选择列表
-    picker->PickFromListOn();                                                                         // 仅从列表中选择
-    if (!picker->Pick(x, y, 0.0, renderer_))                                                          // 选择单元
-        return std::nullopt;                                                                          // 未选中单元
-    const vtkIdType cellId = picker->GetCellId();                                                     // 选中的vtk内部索引
-    auto *elementIds = vtkTypeInt64Array::SafeDownCast(grid_->GetCellData()->GetArray("ElementIds")); // 获取单元原始id数组
+    picker->AddPickList(meshActor_);  // 添加场景对象到选择列表
+    picker->PickFromListOn();  // 仅从列表中选择
+    if (!picker->Pick(x, y, 0.0, renderer_))  // 选择单元
+        return std::nullopt;  // 未选中单元
+    const vtkIdType cellId = picker->GetCellId();  // 选中的vtk内部索引
+    auto *elementIds = vtkTypeInt64Array::SafeDownCast(grid_->GetCellData()->GetArray("ElementIds"));  // 获取单元原始id数组
     if (!elementIds || cellId < 0 || cellId >= elementIds->GetNumberOfValues())
         return std::nullopt;
     // 4. 高亮选中的单元
     highlightCell(cellId);
-    return static_cast<MeshId>(elementIds->GetValue(cellId)); // 返回选中单元的原始编号
+    return static_cast<MeshId>(elementIds->GetValue(cellId));  // 返回选中单元的原始编号
 }
 
 std::optional<MeshId> vtkScene::pickNode(int x, int y) {
@@ -163,26 +213,26 @@ std::optional<MeshId> vtkScene::pickNode(int x, int y) {
 
 void vtkScene::clearHighlight() {
     if (highlightActor_) {
-        renderer_->RemoveActor(highlightActor_); // 移除渲染器中的高亮对象
-        highlightActor_ = nullptr;               // 将持有的高亮对象设为nullptr
+        renderer_->RemoveActor(highlightActor_);  // 移除渲染器中的高亮对象
+        highlightActor_ = nullptr;  // 将持有的高亮对象设为nullptr
     }
 }
 
 void vtkScene::highlightCell(vtkIdType cellId) {
     // 1. 装填提取单元对象
     auto extract = vtkSmartPointer<vtkExtractCells>::New();
-    extract->SetInputData(grid_);    // 装入原始完整网格
-    extract->AddCellIds(&cellId, 1); // 添加提取对象id
+    extract->SetInputData(grid_);  // 装入原始完整网格
+    extract->AddCellIds(&cellId, 1);  // 添加提取对象id
     auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
-    mapper->SetInputConnection(extract->GetOutputPort()); // 将extract提取结果交给mapper
-    mapper->ScalarVisibilityOff();                        // 不显示标量场
+    mapper->SetInputConnection(extract->GetOutputPort());  // 将extract提取结果交给mapper
+    mapper->ScalarVisibilityOff();  // 不显示标量场
     // 2. 设置深度偏移, 防止深度冲突
-    vtkMapper::SetResolveCoincidentTopologyToPolygonOffset();                // 启用Polygon-Offset模式
-    mapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, -4.0); // 设置相对深度偏移
+    vtkMapper::SetResolveCoincidentTopologyToPolygonOffset();  // 启用Polygon-Offset模式
+    mapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, -4.0);  // 设置相对深度偏移
     // 3. 装填场景对象
     highlightActor_ = vtkSmartPointer<vtkActor>::New();
     highlightActor_->SetMapper(mapper);
-    highlightActor_->GetProperty()->SetColor(1.0, 0.0, 0.0); // rgb(255, 0, 0)
+    highlightActor_->GetProperty()->SetColor(1.0, 0.0, 0.0);  // rgb(255, 0, 0)
     highlightActor_->PickableOff();
     renderer_->AddActor(highlightActor_);
 }
@@ -207,8 +257,8 @@ void vtkScene::highlightNode(vtkIdType pointId) {
     // 4. 装填场景对象
     highlightActor_ = vtkSmartPointer<vtkActor>::New();
     highlightActor_->SetMapper(mapper);
-    highlightActor_->GetProperty()->SetColor(1.0, 0.0, 0.0); // rgb(255, 0, 0)
-    highlightActor_->GetProperty()->SetPointSize(10.0);      // 点大小
+    highlightActor_->GetProperty()->SetColor(1.0, 0.0, 0.0);  // rgb(255, 0, 0)
+    highlightActor_->GetProperty()->SetPointSize(10.0);  // 点大小
     highlightActor_->PickableOff();
     renderer_->AddActor(highlightActor_);
 }
@@ -217,9 +267,9 @@ void vtkScene::setMeshRevealProgress(double progress) {
     if (!meshActor_)
         return;
     const double t = std::clamp(progress, 0.0, 1.0);
-    double startColor[3] = {255 / 255.0, 255 / 255.0, 255.0 / 255.0}; // rgb(255, 255, 255) 起始颜色
-    double surfColor[3] = {17 / 255.0, 128 / 255.0, 134 / 255.0};     // rgb(17, 128, 134)网格目标颜色
-    double edgeColor[3] = {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0};    // rgb(0, 0, 0)边线目标颜色
+    double startColor[3] = {255 / 255.0, 255 / 255.0, 255.0 / 255.0};  // rgb(255, 255, 255) 起始颜色
+    double surfColor[3] = {17 / 255.0, 128 / 255.0, 134 / 255.0};  // rgb(17, 128, 134)网格目标颜色
+    double edgeColor[3] = {0.0 / 255.0, 0.0 / 255.0, 0.0 / 255.0};  // rgb(0, 0, 0)边线目标颜色
     double surface[3];
     double edge[3];
     // 1. 计算当前进度下的表面颜色和边线颜色
@@ -228,19 +278,19 @@ void vtkScene::setMeshRevealProgress(double progress) {
         edge[i] = startColor[i] + t * (edgeColor[i] - startColor[i]);
     }
     // 2. 设置网格属性
-    meshActor_->GetProperty()->SetOpacity(1.0);            // 不透明
-    meshActor_->GetProperty()->SetColor(surface);          // 表面颜色
-    meshActor_->GetProperty()->SetEdgeColor(edge);         // 边线颜色
-    meshActor_->GetProperty()->SetAmbient(1.0 - 0.60 * t); // 环境光系数
-    meshActor_->GetProperty()->SetDiffuse(0.60 * t);       // 漫反射系数
-    meshActor_->GetProperty()->SetSpecular(0.12 * t);      // 镜面反射系数
-    meshActor_->GetProperty()->SetSpecularPower(24.0);     // 镜面高光集中程度
+    meshActor_->GetProperty()->SetOpacity(1.0);  // 不透明
+    meshActor_->GetProperty()->SetColor(surface);  // 表面颜色
+    meshActor_->GetProperty()->SetEdgeColor(edge);  // 边线颜色
+    meshActor_->GetProperty()->SetAmbient(1.0 - 0.60 * t);  // 环境光系数
+    meshActor_->GetProperty()->SetDiffuse(0.60 * t);  // 漫反射系数
+    meshActor_->GetProperty()->SetSpecular(0.12 * t);  // 镜面反射系数
+    meshActor_->GetProperty()->SetSpecularPower(24.0);  // 镜面高光集中程度
     // 3. 导入与常驻动画共用边线actor, 保持线宽和深度偏移一致
     if (edgeActor_) {
         edgeActor_->SetVisibility(true);
         edgeActor_->GetProperty()->SetColor(edge);
-        edgeWaveActor_->SetVisibility(t >= 1.0);                                                           // 导入完成后才显示波纹
-        edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf("waveStrength", 0.0f); // 把波纹强度归零
+        edgeWaveActor_->SetVisibility(t >= 1.0);  // 导入完成后才显示波纹
+        edgeWaveActor_->GetShaderProperty()->GetVertexCustomUniforms()->SetUniformf("waveStrength", 0.0f);  // 把波纹强度归零
     }
 }
 
@@ -254,27 +304,27 @@ void vtkScene::buildMeshEdges(bool showImmediately) {
     if (count == 0 || edges->GetNumberOfLines() == 0)
         return;
     // 2. 构建邻接表
-    using Neighbor = std::pair<vtkIdType, double>;                                 // 相邻点id和距离
-    std::vector<std::vector<Neighbor>> adjacency(static_cast<std::size_t>(count)); // 邻接表
-    auto *lines = edges->GetLines();                                               // 获取线单元集合
+    using Neighbor = std::pair<vtkIdType, double>;  // 相邻点id和距离
+    std::vector<std::vector<Neighbor>> adjacency(static_cast<std::size_t>(count));  // 邻接表
+    auto *lines = edges->GetLines();  // 获取线单元集合
     vtkIdType size = 0;
     const vtkIdType *ids = nullptr;
     lines->InitTraversal();
-    while (lines->GetNextCell(size, ids)) {    // 遍历所有线单元
-        for (vtkIdType i = 1; i < size; ++i) { // 遍历线单元中的所有点
+    while (lines->GetNextCell(size, ids)) {  // 遍历所有线单元
+        for (vtkIdType i = 1; i < size; ++i) {  // 遍历线单元中的所有点
             double a[3], b[3];
-            edges->GetPoint(ids[i - 1], a); // 根据点编号读取两个端点坐标
+            edges->GetPoint(ids[i - 1], a);  // 根据点编号读取两个端点坐标
             edges->GetPoint(ids[i], b);
-            const double length = std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); // 计算两个端点之间的距离
-            adjacency[ids[i - 1]].emplace_back(ids[i], length);                      // 记录a->b
-            adjacency[ids[i]].emplace_back(ids[i - 1], length);                      // 记录b->a
+            const double length = std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);  // 计算两个端点之间的距离
+            adjacency[ids[i - 1]].emplace_back(ids[i], length);  // 记录a->b
+            adjacency[ids[i]].emplace_back(ids[i - 1], length);  // 记录b->a
         }
     }
     // 3. 计算每个点到所在部件波源的最短边线路径距离
     std::vector<double> distance(static_cast<std::size_t>(count), std::numeric_limits<double>::infinity());
-    using Visit = std::pair<double, vtkIdType>; // 到波源的距离, 点编号
+    using Visit = std::pair<double, vtkIdType>;  // 到波源的距离, 点编号
     std::priority_queue<Visit, std::vector<Visit>, std::greater<Visit>> pending;
-    for (vtkIdType source = 0; source < count; ++source) { // 每个部件选自己第一个点作为波源
+    for (vtkIdType source = 0; source < count; ++source) {  // 每个部件选自己第一个点作为波源
         if (std::isfinite(distance[source]))
             continue;
         distance[source] = 0.0;
@@ -296,16 +346,16 @@ void vtkScene::buildMeshEdges(bool showImmediately) {
     // 4. 创建普通边线actor
     const double maxDistance = *std::max_element(distance.begin(), distance.end());
     auto mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-    mapper->SetInputData(edges); // 输入原始边线数据
+    mapper->SetInputData(edges);  // 输入原始边线数据
     mapper->ScalarVisibilityOff();
     vtkMapper::SetResolveCoincidentTopologyToPolygonOffset();
     mapper->SetRelativeCoincidentTopologyLineOffsetParameters(0.0, -1.0);
     edgeActor_ = vtkSmartPointer<vtkActor>::New();
     edgeActor_->SetMapper(mapper);
-    edgeActor_->GetProperty()->SetColor(0.0, 0.0, 0.0); // rgb(0,0,0)
+    edgeActor_->GetProperty()->SetColor(0.0, 0.0, 0.0);  // rgb(0,0,0)
     edgeActor_->GetProperty()->SetLineWidth(1.5);
     edgeActor_->GetProperty()->LightingOff();
-    edgeActor_->PickableOff(); // 禁止此装饰性边线参与拾取
+    edgeActor_->PickableOff();  // 禁止此装饰性边线参与拾取
     edgeActor_->SetVisibility(showImmediately);
     renderer_->AddActor(edgeActor_);
     // 5. 创建波纹actor
@@ -349,7 +399,7 @@ void vtkScene::buildMeshEdges(bool showImmediately) {
     wave->GetPointData()->AddArray(waveCenters);
     auto tube = vtkSmartPointer<vtkTubeFilter>::New();
     tube->SetInputData(wave);
-    tube->SetRadius(diagonal * 0.00165); // 波纹线条本身的粗细
+    tube->SetRadius(diagonal * 0.00165);  // 波纹线条本身的粗细
     tube->SetVaryRadiusToVaryRadiusOff();
     tube->SetNumberOfSides(8);
     tube->CappingOn();
@@ -382,7 +432,7 @@ void vtkScene::buildMeshEdges(bool showImmediately) {
                                        "//VTK::PositionVC::Impl\n"
                                        "#undef vertexMC\n",
                                        false);
-    edgeWaveActor_->PickableOff(); // 禁止此装饰性波纹参与拾取
+    edgeWaveActor_->PickableOff();  // 禁止此装饰性波纹参与拾取
     edgeWaveActor_->SetVisibility(showImmediately);
     renderer_->AddActor(edgeWaveActor_);
 }

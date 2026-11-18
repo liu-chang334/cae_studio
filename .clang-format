@@ -3,6 +3,10 @@ IndentWidth: 4
 ColumnLimit: 135
 BreakBeforeBraces: Attach
 
+# 行后注释紧跟代码，间隔 2 个空格，不在各行之间对齐。
+AlignTrailingComments: false
+SpacesBeforeTrailingComments: 2
+
 # public:、private: 等相对于成员缩进向左移动 4 列，
 # 配合 IndentWidth: 4，使它们与 class 左侧对齐。
 AccessModifierOffset: -4

@@ -100,17 +100,23 @@ private:
 private:
     /// @brief 渲染器
     vtkSmartPointer<vtkRenderer> renderer_;
+
     /// @brief 场景对象
     vtkSmartPointer<vtkActor> meshActor_;
+
     /// @brief 网格
     vtkSmartPointer<vtkUnstructuredGrid> grid_;
+
     /// @brief 标量对象
     vtkSmartPointer<vtkScalarBarActor> scalarBar_;
+
     /// @brief 高亮对象
     /// @details 用于高亮单元或节点, 选中后显示高亮框
     vtkSmartPointer<vtkActor> highlightActor_;
+
     /// @brief 边线对象
     vtkSmartPointer<vtkActor> edgeActor_;
+
     /// @brief 边线波纹对象
     vtkSmartPointer<vtkActor> edgeWaveActor_;
 };
