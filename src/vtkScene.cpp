@@ -37,8 +37,8 @@
 
 vtkScene::vtkScene() : renderer_(vtkSmartPointer<vtkRenderer>::New()) {
     renderer_->GradientBackgroundOn();  // 渐变背景
-    renderer_->SetBackground(1.0, 1.0, 1.0);  // rgb(255,255,255)
-    renderer_->SetBackground2(1.0, 1.0, 1.0);  // rgb(255,255,255)
+    renderer_->SetBackground(0.95, 0.975, 0.98);  // 下方柔和冷白，与日志渐变衔接
+    renderer_->SetBackground2(1.0, 1.0, 1.0);  // 上方白色
     // renderer_->SetBackground(0.043, 0.071, 0.125);
     // renderer_->SetBackground2(0.106, 0.169, 0.251);
 }

@@ -33,7 +33,8 @@ MeshViewport::MeshViewport(QWidget *parent) : QVTKOpenGLNativeWidget(parent), sc
     orientationWidget_->SetOrientationMarker(axes);
     orientationWidget_->SetInteractor(interactor());
     orientationWidget_->SetCurrentRenderer(scene_->renderer());
-    orientationWidget_->SetViewport(0.80, 0.00, 1.00, 0.20);
+    // 底部留给渐变日志层，坐标标记移至右上角。
+    orientationWidget_->SetViewport(0.82, 0.80, 1.00, 0.98);
     orientationWidget_->SetEnabled(1);
     orientationWidget_->InteractiveOff();
     // 导入动画配置

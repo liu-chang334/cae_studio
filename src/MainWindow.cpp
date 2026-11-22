@@ -1,537 +1,482 @@
 #include "MainWindow.h"
 #include "AbaqusInpReader.h"
-#include "LoadData.h"
-#include "MeshData.h"
+#include "DisplacementResultIO.h"
 #include "MeshViewport.h"
+#include "MinimalUi.h"
 #include "vtkBuilder.h"
 
+#include <QAction>
 #include <QActionGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QDir>
+#include <QEvent>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QFont>
 #include <QFormLayout>
+#include <QFrame>
+#include <QFutureWatcher>
+#include <QGraphicsDropShadowEffect>
+#include <QGuiApplication>
+#include <QHBoxLayout>
 #include <QLabel>
-#include <QMenuBar>
+#include <QMessageBox>
 #include <QPlainTextEdit>
-#include <QPushButton>
-#include <QSplitter>
-#include <QStackedWidget>
-#include <QStatusBar>
-#include <QTableWidget>
-#include <QToolBar>
-#include <QTreeWidget>
-#include <QTreeWidgetItem>
+#include <QPalette>
+#include <QScreen>
+#include <QSignalBlocker>
+#include <QStringList>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
+#include <algorithm>
+#include <exception>
+#include <filesystem>
 #include <utility>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-    setupModelPanel();
-    setupInfoTable();
+    setFont(QFont(QStringLiteral("Microsoft YaHei UI"), 9));
     setupLogWidget();
-    setupWorkspacePanels();
     setupCentral();
-    setupToolBar();
-
-    switchWorkspace(Workspace::Preprocess);
-    resize(1100, 760);
-}
-
-void MainWindow::setupModelPanel() {
-    /// 创建树控件, this为父对象
-    modelTree_ = new QTreeWidget(this);
-    modelTree_->setColumnCount(2);  // 设置列数
-    QStringList headers = {tr("项目"), tr("数量 / 值")};  // 表头
-    modelTree_->setHeaderLabels(headers);  // 设置表头
-    modelTree_->setColumnWidth(0, 180);  // 设置第一列宽度
-    modelTree_->setColumnWidth(1, 20);  // 设置第二列宽度
-    // 创建根节点
-    QTreeWidgetItem *root_item = new QTreeWidgetItem(modelTree_);
-    root_item->setText(0, "Model-1");
-    // 创建子节点
-    nodeItem_ = new QTreeWidgetItem(root_item);
-    nodeItem_->setText(0, "Node");
-    elemItem_ = new QTreeWidgetItem(root_item);
-    elemItem_->setText(0, "Element");
-    nsetItem_ = new QTreeWidgetItem(root_item);
-    nsetItem_->setText(0, "Nset");
-    esetItem_ = new QTreeWidgetItem(root_item);
-    esetItem_->setText(0, "Eset");
-    materialItem_ = new QTreeWidgetItem(root_item);
-    materialItem_->setText(0, tr("Material"));
-    boundaryItem_ = new QTreeWidgetItem(root_item);
-    boundaryItem_->setText(0, tr("Boundary"));
-    loadItem_ = new QTreeWidgetItem(root_item);
-    loadItem_->setText(0, tr("Load"));
-
-    modelTree_->expandAll();
-    updateModelTree();
-}
-
-void MainWindow::setupWorkspacePanels() {
-    // 求解工作区
-    solvePanel_ = new QWidget(this);
-    auto *solveLayout = new QVBoxLayout(solvePanel_);
-    auto *solveTitle = new QLabel(tr("线性静力分析"), solvePanel_);
-    solveStatusLabel_ = new QLabel(tr("尚未求解"), solvePanel_);
-    solveStatusLabel_->setWordWrap(true);
-    solveButton_ = new QPushButton(tr("开始求解"), solvePanel_);
-    viewResultsButton_ = new QPushButton(tr("查看结果"), solvePanel_);
-    solveLayout->addWidget(solveTitle);
-    solveLayout->addWidget(solveStatusLabel_);
-    solveLayout->addWidget(solveButton_);
-    solveLayout->addWidget(viewResultsButton_);
-    solveLayout->addStretch();
-    connect(solveButton_, &QPushButton::clicked, this, &MainWindow::onSolve);
-    connect(viewResultsButton_, &QPushButton::clicked, this, [this]() { switchWorkspace(Workspace::Postprocess); });
-
-    // 后处理工作区
-    resultPanel_ = new QWidget(this);
-    auto *resultLayout = new QVBoxLayout(resultPanel_);
-    auto *title = new QLabel(tr("场结果"), resultPanel_);
-    resultLayout->addWidget(title);
-    fieldCombo_ = new QComboBox(resultPanel_);
-    fieldCombo_->addItem(tr("请选择物理量"));
-    fieldCombo_->addItem(tr("位移 U"));
-    fieldCombo_->addItem(tr("约束反力 RF"));
-    componentCombo_ = new QComboBox(resultPanel_);
-    componentCombo_->addItem(tr("总量 / 模长"));
-    componentCombo_->addItem(tr("X 分量"));
-    componentCombo_->addItem(tr("Y 分量"));
-    componentCombo_->addItem(tr("Z 分量"));
-    auto *form = new QFormLayout();
-    form->addRow(tr("物理量"), fieldCombo_);
-    form->addRow(tr("分量"), componentCombo_);
-    resultLayout->addLayout(form);
-    contourCheck_ = new QCheckBox(tr("显式云图"), resultPanel_);
-    contourCheck_->setChecked(true);
-    legendCheck_ = new QCheckBox(tr("显示色标"), resultPanel_);
-    legendCheck_->setChecked(true);
-    resultLayout->addWidget(contourCheck_);
-    resultLayout->addWidget(legendCheck_);
-    auto *description = new QLabel(tr("数据位置: 节点\n"
-                                      "坐标系: 全局坐标系\n"
-                                      "色标范围: 自动\n"
-                                      "单位: 与输入模型单位制一致"),
-                                   resultPanel_);
-    description->setWordWrap(true);
-    resultLayout->addWidget(description);
-    resultLayout->addStretch();
-    connect(fieldCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateResultDisplay);
-    connect(componentCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateResultDisplay);
-    connect(contourCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
-    connect(legendCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
-}
-
-void MainWindow::setupCentral() {
-    // 创建vtk渲染窗口
-    viewport_ = new MeshViewport(this);
-    connect(viewport_, &MeshViewport::elementPicked, this, [this](MeshId elementId) {
-        showElementInfo(elementId);
-        logWidget_->appendPlainText(tr("选中单元：%1").arg(static_cast<qlonglong>(elementId)));
-    });
-    connect(viewport_, &MeshViewport::nodePicked, this, [this](MeshId nodeId) {
-        showNodeInfo(nodeId);
-        logWidget_->appendPlainText(tr("选中节点：%1").arg(static_cast<qlonglong>(nodeId)));
-    });
-    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() {
-        infoTable_->setRowCount(0);
-        logWidget_->appendPlainText(tr("已取消选择"));
-    });
-    // 创建右侧区域: vtk渲染窗口 + 日志窗口
-    QSplitter *right = new QSplitter(Qt::Vertical, this);
-    right->addWidget(viewport_);
-    right->addWidget(logWidget_);
-    right->setStretchFactor(0, 5);
-    right->setStretchFactor(1, 2);
-    right->setSizes({760, 190});
-    // 创建左侧区域: 模型树 + 信息表格
-    QSplitter *left = new QSplitter(Qt::Vertical, this);
-    navigationStack_ = new QStackedWidget(this);
-    navigationStack_->addWidget(modelTree_);
-    navigationStack_->addWidget(solvePanel_);
-    navigationStack_->addWidget(resultPanel_);
-    left->addWidget(navigationStack_);
-    left->addWidget(infoTable_);
-    left->setStretchFactor(0, 5);
-    left->setStretchFactor(1, 2);
-    left->setSizes({760, 190});
-    // 整体布局
-    QSplitter *splitter = new QSplitter(this);
-    splitter->addWidget(left);
-    splitter->addWidget(right);
-    splitter->setStretchFactor(1, 1);
-    splitter->setSizes({250, 950});
-    setCentralWidget(splitter);
-}
-
-void MainWindow::updateModelTree() {
-    nodeItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.nodes.size())));
-    elemItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.mesh.elements.size())));
-    while (nsetItem_->childCount() > 0)
-        delete nsetItem_->takeChild(0);  // 删除旧模型节点集条目
-    while (esetItem_->childCount() > 0)
-        delete esetItem_->takeChild(0);  // 删除旧模型单元集条目
-    while (loadItem_->childCount() > 0)
-        delete loadItem_->takeChild(0);  // 删除旧模型荷载条目
-    while (boundaryItem_->childCount() > 0)
-        delete boundaryItem_->takeChild(0);  // 删除旧模型边界条件条目
-    while (materialItem_->childCount() > 0)
-        delete materialItem_->takeChild(0);  // 删除旧模型材料条目
-    nsetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.nodeSets.size())));
-    esetItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.elemSets.size())));
-    loadItem_->setText(1, QString::number(static_cast<qlonglong>(currentModel_.loads.size())));
-    boundaryItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.boundaries.size())));
-    materialItem_->setText(1, QString::number(static_cast<qulonglong>(currentModel_.materials.size())));
-    for (const auto &[name, nodeIds] : currentModel_.nodeSets) {
-        auto *setItem = new QTreeWidgetItem(nsetItem_);
-        setItem->setText(0, QString::fromStdString(name));
-        setItem->setText(1, QString::number(static_cast<qulonglong>(nodeIds.size())));
-    }
-    for (const auto &[name, elemIds] : currentModel_.elemSets) {
-        auto *setItem = new QTreeWidgetItem(esetItem_);
-        setItem->setText(0, QString::fromStdString(name));
-        setItem->setText(1, QString::number(static_cast<qulonglong>(elemIds.size())));
-    }
-    for (int i = 0; i < currentModel_.loads.size(); ++i) {
-        auto &load = currentModel_.loads[i];
-        auto *item = new QTreeWidgetItem(loadItem_);
-        item->setText(0, tr(" %1, in %2").arg(QString::fromStdString(load.nodeSetName)).arg(load.degreeOfFreedom));
-        item->setText(1, QString::number(load.magnitude, 'g', 12));
-        item->setToolTip(1, tr("节点集中每个节点的荷载值"));
-    }
-    for (const auto &boundary : currentModel_.boundaries) {
-        auto *item = new QTreeWidgetItem(boundaryItem_);
-        item->setText(0, tr("%1, in %2").arg(QString::fromStdString(boundary.nodeSetName)).arg(boundary.degreeOfFreedom));
-        item->setText(1, QString::number(boundary.displacement, 'g', 12));
-        item->setToolTip(1, tr("节点集中每个节点的指定位移值"));
-    }
-    for (const auto &material : currentModel_.materials) {
-        auto *item = new QTreeWidgetItem(materialItem_);
-        item->setText(0, QString::fromStdString(material.name));
-        if (material.elastic) {
-            const auto &elastic = *material.elastic;
-            auto *elasticItem = new QTreeWidgetItem(item);
-            elasticItem->setText(0, tr("Elastic"));
-            auto *youngItem = new QTreeWidgetItem(elasticItem);
-            youngItem->setText(0, tr("E"));
-            youngItem->setText(1, QString::number(elastic.youngModulus, 'g', 12));
-            auto *poissonItem = new QTreeWidgetItem(elasticItem);
-            poissonItem->setText(0, tr("nu"));
-            poissonItem->setText(1, QString::number(elastic.poissonRatio, 'g', 12));
-            elasticItem->setExpanded(false);
-        }
-        item->setExpanded(true);
-    }
-    nsetItem_->setExpanded(true);
-    loadItem_->setExpanded(true);
-    boundaryItem_->setExpanded(true);
-    materialItem_->setExpanded(true);
-    modelTree_->resizeColumnToContents(1);
-}
-
-void MainWindow::setupInfoTable() {
-    infoTable_ = new QTableWidget(0, 2, this);
-    infoTable_->setHorizontalHeaderLabels({tr("属性"), tr("值")});
-    infoTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-}
-
-void MainWindow::showElementInfo(MeshId elementId) {
-    const auto &elements = currentModel_.mesh.elements;
-    const auto it =
-        std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) { return element.id == elementId; });
-    if (it == elements.end()) {
-        infoTable_->setRowCount(0);
-        return;
-    }
-    const MeshElement &element = *it;
-    QStringList nodeIds;
-    for (MeshId nodeId : element.nodeIds)
-        nodeIds.append(QString::number(static_cast<qlonglong>(nodeId)));
-    QString typeName = tr("未知");
-    switch (element.topology) {
-    case CellTopology::HEXAHEDRON:
-        typeName = QStringLiteral("Hexahedral");
-        break;
-    }
-    infoTable_->setRowCount(3);
-    infoTable_->setItem(0, 0, new QTableWidgetItem(tr("单元编号")));
-    infoTable_->setItem(0, 1, new QTableWidgetItem(QString::number(static_cast<qlonglong>(element.id))));
-    infoTable_->setItem(1, 0, new QTableWidgetItem(tr("单元类型")));
-    infoTable_->setItem(1, 1, new QTableWidgetItem(typeName));
-    infoTable_->setItem(2, 0, new QTableWidgetItem(tr("拓扑节点")));
-    infoTable_->setItem(2, 1, new QTableWidgetItem(nodeIds.join(QStringLiteral(", "))));
-    infoTable_->resizeColumnToContents(0);
-    infoTable_->resizeColumnToContents(1);
-}
-
-void MainWindow::showNodeInfo(MeshId nodeId) {
-    const auto &nodes = currentModel_.mesh.nodes;
-    const auto it = std::find_if(nodes.begin(), nodes.end(), [nodeId](const MeshNode &node) { return node.id == nodeId; });
-    if (it == nodes.end()) {
-        infoTable_->setRowCount(0);
-        return;
-    }
-    const QStringList labels = {tr("节点编号"), QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("Z")};
-    const auto &xyz = it->coordinates;
-    const QStringList values = {QString::number(static_cast<qlonglong>(it->id)), QString::number(xyz[0], 'g', 12),
-                                QString::number(xyz[1], 'g', 12), QString::number(xyz[2], 'g', 12)};
-    infoTable_->setRowCount(4);
-    for (int row = 0; row < 4; ++row) {
-        infoTable_->setItem(row, 0, new QTableWidgetItem(labels[row]));
-        infoTable_->setItem(row, 1, new QTableWidgetItem(values[row]));
-    }
-    infoTable_->resizeColumnsToContents();
+    setupResultPopup();
+    setupToolPalettes();
+    updateActionStates();
+    setMinimumSize(680, 500);
+    resize(1180, 800);
+    logWidget_->appendPlainText(tr("Ctrl+O 选择工作目录 · Ctrl+0 适应视图 · F5 求解 · Ctrl+R 云图"));
 }
 
 void MainWindow::setupLogWidget() {
     logWidget_ = new QPlainTextEdit(this);
     logWidget_->setReadOnly(true);
+    logWidget_->setMaximumBlockCount(1200);
+    logWidget_->setFont(QFont(QStringLiteral("Consolas"), 9));
+    logWidget_->setFrameStyle(QFrame::NoFrame);
+    QPalette palette = logWidget_->palette();
+    palette.setColor(QPalette::Base, Qt::transparent);
+    logWidget_->setPalette(palette);
+    logWidget_->viewport()->setAutoFillBackground(false);
+    logWidget_->setStyleSheet(QStringLiteral(
+        "QPlainTextEdit { background: transparent; color: #657e88; border: none; selection-background-color: #d5e7e9; }"
+        "QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }"
+        "QScrollBar::handle:vertical { background: rgba(130, 157, 166, 100); border-radius: 2px; min-height: 20px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"));
 }
 
-void MainWindow::setupToolBar() {
-    // 创建操作
-    openAction_ = new QAction(tr("打开模型"), this);
-    openAction_->setShortcut(QKeySequence::Open);
-    connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
-    solveAction_ = new QAction(tr("开始求解"), this);
-    connect(solveAction_, &QAction::triggered, this, &MainWindow::onSolve);
-    viewResultsAction_ = new QAction(tr("查看结果"), this);
-    connect(viewResultsAction_, &QAction::triggered, this, [this]() { switchWorkspace(Workspace::Postprocess); });
-    auto *fitAction = new QAction(tr("适应窗口"), this);
-    connect(fitAction, &QAction::triggered, viewport_, &MeshViewport::resetCamera);
-    pickNodeAction_ = new QAction(tr("选择节点"), this);
-    pickElementAction_ = new QAction(tr("选择单元"), this);
-    pickNodeAction_->setCheckable(true);
-    pickElementAction_->setCheckable(true);
-    auto *pickGroup = new QActionGroup(this);
-    pickGroup->setExclusive(true);
-    pickGroup->addAction(pickNodeAction_);
-    pickGroup->addAction(pickElementAction_);
-    pickElementAction_->setChecked(true);
-    connect(pickNodeAction_, &QAction::toggled, viewport_, &MeshViewport::setNodePickingEnabled);
-    // 菜单
-    auto *fileMenu = menuBar()->addMenu(tr("文件"));
-    fileMenu->addAction(openAction_);
-    auto *viewMenu = menuBar()->addMenu(tr("视图"));
-    viewMenu->addAction(fitAction);
-    auto *modelMenu = menuBar()->addMenu(tr("模型"));
-    modelMenu->addAction(pickNodeAction_);
-    modelMenu->addAction(pickElementAction_);
-    auto *analysisMenu = menuBar()->addMenu(tr("分析"));
-    analysisMenu->addAction(solveAction_);
-    auto *resultMenu = menuBar()->addMenu(tr("结果"));
-    resultMenu->addAction(viewResultsAction_);
-    // 公共工具栏
-    toolBar_ = addToolBar(tr("公共"));
-    toolBar_->setMovable(true);
-    toolBar_->setFloatable(true);
-    toolBar_->addAction(openAction_);
-    toolBar_->addAction(fitAction);
-    toolBar_->addSeparator();
-    workspaceTabs_ = new QTabBar(toolBar_);
-    workspaceTabs_->setExpanding(false);
-    workspaceTabs_->addTab(tr("前处理"));
-    workspaceTabs_->addTab(tr("求解"));
-    workspaceTabs_->addTab(tr("后处理"));
-    toolBar_->addWidget(workspaceTabs_);
-    connect(workspaceTabs_, &QTabBar::currentChanged, this, [this](int index) {
-        if (index >= 0 && index <= 2)
-            switchWorkspace(static_cast<Workspace>(index));
+void MainWindow::setupCentral() {
+    viewport_ = new MeshViewport(this);
+    setCentralWidget(viewport_);
+    viewport_->installEventFilter(this);
+    logPanel_ = new SoftLogPanel(logWidget_, viewport_);
+
+    connect(viewport_, &MeshViewport::elementPicked, this, &MainWindow::showElementInfo);
+    connect(viewport_, &MeshViewport::nodePicked, this, &MainWindow::showNodeInfo);
+    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() {
+        logWidget_->appendPlainText(tr("已取消选择"));
     });
-    // 当前工作区工具栏
-    addToolBarBreak();
-    workspaceToolBar_ = addToolBar(tr("工作区"));
-    workspaceToolBar_->setMovable(false);
-    workspaceToolBar_->setFloatable(false);
-    workspaceToolBar_->addAction(pickNodeAction_);
-    workspaceToolBar_->addAction(pickElementAction_);
-    workspaceToolBar_->addAction(solveAction_);
-    workspaceToolBar_->addAction(viewResultsAction_);
 }
 
-void MainWindow::switchWorkspace(Workspace workspace) {
-    if (workspace == Workspace::Postprocess && !resultGrid_)
+void MainWindow::setupResultPopup() {
+    resultDialog_ = new QDialog(this, Qt::Tool | Qt::FramelessWindowHint);
+    resultDialog_->setAttribute(Qt::WA_TranslucentBackground);
+    resultDialog_->setWindowTitle(tr("位移云图"));
+    resultDialog_->setFixedWidth(292);
+
+    auto *outer = new QVBoxLayout(resultDialog_);
+    outer->setContentsMargins(12, 12, 12, 12);
+    auto *card = new QFrame(resultDialog_);
+    card->setObjectName(QStringLiteral("ResultCard"));
+    card->setStyleSheet(QStringLiteral(
+        "QFrame#ResultCard { border: 1px solid rgba(211, 226, 229, 210); border-radius: 18px;"
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,252), stop:1 rgba(236,246,247,247)); }"
+        "QLabel { background: transparent; border: none; color: #5a737e; }"
+        "QComboBox { color: #436775; background: rgba(255,255,255,210); border: 1px solid #d8e6e9;"
+        "border-radius: 9px; padding: 7px 10px; min-width: 100px; }"
+        "QComboBox QAbstractItemView { color: #436775; background: #f7fbfb; selection-background-color: #dbecee; }"
+        "QCheckBox { color: #647e88; spacing: 8px; background: transparent; }"
+        "QToolButton { border: none; border-radius: 8px; background: transparent; }"
+        "QToolButton:hover { background: #e4eef0; }"));
+    auto *shadow = new QGraphicsDropShadowEffect(card);
+    shadow->setBlurRadius(22);
+    shadow->setOffset(0, 4);
+    shadow->setColor(QColor(45, 73, 83, 30));
+    card->setGraphicsEffect(shadow);
+    outer->addWidget(card);
+    auto *layout = new QVBoxLayout(card);
+    layout->setContentsMargins(18, 14, 18, 20);
+    layout->setSpacing(14);
+
+    auto *heading = new QHBoxLayout();
+    auto *title = new PopupTitleBar(tr("位移云图"), card);
+    title->setStyleSheet(QStringLiteral("font-size: 13px; font-weight: 600; color: #3b606c;"));
+    auto *close = new QToolButton(card);
+    close->setIcon(loadUiIcon(QStringLiteral(":/icons/close.svg")));
+    close->setIconSize(QSize(18, 18));
+    close->setFixedSize(26, 26);
+    close->setToolTip(tr("关闭设置 · Esc"));
+    close->setAccessibleName(tr("关闭云图设置"));
+    heading->addWidget(title, 1);
+    heading->addWidget(close);
+    layout->addLayout(heading);
+    connect(close, &QToolButton::clicked, resultDialog_, &QDialog::hide);
+
+    auto *subtitle = new QLabel(tr("节点结果 · 全局坐标系"), card);
+    subtitle->setStyleSheet(QStringLiteral("color: #91a3aa; font-size: 10px;"));
+    layout->addWidget(subtitle);
+    componentCombo_ = new QComboBox(card);
+    componentCombo_->addItems({tr("总位移 |U|"), tr("U1 · X 方向"), tr("U2 · Y 方向"), tr("U3 · Z 方向")});
+    componentCombo_->setPlaceholderText(tr("选择位移分量"));
+    componentCombo_->setCurrentIndex(-1);
+    auto *form = new QFormLayout();
+    form->addRow(tr("分量"), componentCombo_);
+    layout->addLayout(form);
+    contourCheck_ = new SoftCheckBox(tr("显示云图"), card);
+    legendCheck_ = new SoftCheckBox(tr("显示色标"), card);
+    contourCheck_->setChecked(true);
+    legendCheck_->setChecked(true);
+    layout->addWidget(contourCheck_);
+    layout->addWidget(legendCheck_);
+    connect(componentCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateResultDisplay);
+    connect(contourCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
+    connect(legendCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
+}
+
+void MainWindow::setupToolPalettes() {
+    // 目录操作置于首个工具条顶部，快捷键继续保留。
+    openAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/folder-open.svg")), tr("打开工作目录"), this);
+    openAction_->setToolTip(tr("打开工作目录 · Ctrl+O"));
+    openAction_->setShortcut(QKeySequence::Open);
+    addAction(openAction_);
+    connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
+    auto *fitAction = new QAction(tr("适应窗口"), this);
+    fitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
+    addAction(fitAction);
+    connect(fitAction, &QAction::triggered, viewport_, &MeshViewport::resetCamera);
+
+    pickElementAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/select-element.svg")), tr("选取单元"), this);
+    pickNodeAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/select-node.svg")), tr("选取节点"), this);
+    pickElementAction_->setToolTip(tr("选取单元 · 前处理"));
+    pickNodeAction_->setToolTip(tr("选取节点 · 前处理"));
+    pickElementAction_->setCheckable(true);
+    pickNodeAction_->setCheckable(true);
+    auto *selection = new QActionGroup(this);
+    selection->setExclusive(true);
+    selection->addAction(pickElementAction_);
+    selection->addAction(pickNodeAction_);
+    pickElementAction_->setChecked(true);
+    connect(pickElementAction_, &QAction::triggered, this, [this]() {
+        switchWorkspace(Workspace::Preprocess);
+        viewport_->setNodePickingEnabled(false);
+    });
+    connect(pickNodeAction_, &QAction::triggered, this, [this]() {
+        switchWorkspace(Workspace::Preprocess);
+        viewport_->setNodePickingEnabled(true);
+    });
+
+    solveAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/solve.svg")), tr("求解"), this);
+    solveAction_->setShortcut(QKeySequence(QStringLiteral("F5")));
+    addAction(solveAction_);
+    connect(solveAction_, &QAction::triggered, this, &MainWindow::onSolve);
+    viewResultsAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/contour.svg")), tr("显示云图"), this);
+    viewResultsAction_->setCheckable(true);
+    viewResultsAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
+    viewResultsAction_->setToolTip(tr("显示云图 · 选择位移分量 · Ctrl+R"));
+    addAction(viewResultsAction_);
+    connect(viewResultsAction_, &QAction::triggered, this, &MainWindow::showResultOptions);
+
+    selectionPalette_ = new FloatingToolPalette(tr("工作目录与前处理"), viewport_);
+    selectionPalette_->addActionButton(openAction_);
+    selectionPalette_->addActionButton(pickElementAction_);
+    selectionPalette_->addActionButton(pickNodeAction_);
+    selectionPalette_->move(24, 72);
+    analysisPalette_ = new FloatingToolPalette(tr("求解与后处理"), viewport_);
+    analysisPalette_->addActionButton(solveAction_);
+    analysisPalette_->addActionButton(viewResultsAction_);
+    analysisPalette_->move(70, 72);
+    layoutOverlays();
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == viewport_ && event->type() == QEvent::Resize)
+        layoutOverlays();
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::layoutOverlays() {
+    if (logPanel_) {
+        const int height = std::min(156, viewport_->height() / 3);
+        logPanel_->setGeometry(0, viewport_->height() - height, viewport_->width(), height);
+        logPanel_->raise();
+    }
+    // 等视口获得实际尺寸后再定位，避免构造期间把两个工具条挤在同一处。
+    if (viewport_->width() < 300 || viewport_->height() < 300)
         return;
-    workspace_ = workspace;
-    const int index = static_cast<int>(workspace);
-    // 防止setCurrentIndex再次触发工作区切换
-    const QSignalBlocker blocker(workspaceTabs_);
-    workspaceTabs_->setCurrentIndex(index);
-    navigationStack_->setCurrentIndex(index);
-    infoTable_->setRowCount(0);
-    updateActionStates();
-    updateResultDisplay();
-    switch (workspace_) {
-    case Workspace::Preprocess:
-        statusBar()->showMessage(tr("前处理: 查看模型"));
-        break;
-    case Workspace::Solve:
-        statusBar()->showMessage(tr("求解: 运行分析"));
-        break;
-    case Workspace::Postprocess:
-        statusBar()->showMessage(tr("后处理: 查看结果"));
-        break;
+    if (!palettesPlaced_ && selectionPalette_ && analysisPalette_) {
+        selectionPalette_->move(24, 72);
+        analysisPalette_->move(70, 72);
+        palettesPlaced_ = true;
+    }
+    for (auto *palette : {selectionPalette_, analysisPalette_}) {
+        if (palette) {
+            palette->keepInBounds();
+            palette->raise();
+        }
     }
 }
 
+void MainWindow::showElementInfo(MeshId elementId) {
+    const auto &elements = currentModel_.mesh.elements;
+    const auto it = std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) {
+        return element.id == elementId;
+    });
+    if (it == elements.end())
+        return;
+    QStringList nodeIds;
+    for (MeshId id : it->nodeIds)
+        nodeIds.append(QString::number(static_cast<qlonglong>(id)));
+    logWidget_->appendPlainText(tr("单元 %1 · 节点 [%2]").arg(static_cast<qlonglong>(elementId)).arg(nodeIds.join(", ")));
+}
+
+void MainWindow::showNodeInfo(MeshId nodeId) {
+    const auto &nodes = currentModel_.mesh.nodes;
+    const auto it = std::find_if(nodes.begin(), nodes.end(), [nodeId](const MeshNode &node) { return node.id == nodeId; });
+    if (it == nodes.end())
+        return;
+    const auto &xyz = it->coordinates;
+    logWidget_->appendPlainText(tr("节点 %1 · X %2 · Y %3 · Z %4")
+        .arg(static_cast<qlonglong>(nodeId)).arg(xyz[0], 0, 'g', 10).arg(xyz[1], 0, 'g', 10).arg(xyz[2], 0, 'g', 10));
+}
+
+bool MainWindow::switchWorkspace(Workspace workspace) {
+    if (workspace == Workspace::Postprocess) {
+        if (solving_ || !loadSavedResults())
+            return false;
+    } else {
+        resultDialog_->hide();
+        if (workspace_ == Workspace::Postprocess && modelGrid_)
+            viewport_->setMesh(modelGrid_, false, false);
+        resultGrid_ = nullptr;
+    }
+    workspace_ = workspace;
+    updateActionStates();
+    updateResultDisplay();
+    return true;
+}
+
 void MainWindow::updateActionStates() {
-    const bool hasModel = modelGrid_.GetPointer() != nullptr;
-    const bool hasResults = resultGrid_.GetPointer() != nullptr;
-    const bool canSolve = hasModel && !solving_;
-    const bool showPicking = workspace_ != Workspace::Solve;
-
+    const bool hasModel = modelGrid_.GetPointer() != nullptr && !workingDirectory_.isEmpty();
+    const bool hasResultFile = !resultFilePath_.isEmpty() && QFileInfo(resultFilePath_).isFile();
     openAction_->setEnabled(!solving_);
-    solveAction_->setEnabled(canSolve);
-    solveButton_->setEnabled(canSolve);
-
-    viewResultsAction_->setEnabled(hasResults);
-    viewResultsButton_->setEnabled(hasResults);
-    workspaceTabs_->setTabEnabled(2, hasResults);
-
+    solveAction_->setEnabled(hasModel && !solving_);
+    solveAction_->setToolTip(solving_ ? tr("正在计算并保存位移…") : tr("求解并保存位移 · F5"));
+    viewResultsAction_->setEnabled(hasModel && hasResultFile && !solving_);
     pickNodeAction_->setEnabled(hasModel);
     pickElementAction_->setEnabled(hasModel);
+    viewResultsAction_->setChecked(workspace_ == Workspace::Postprocess &&
+                                   componentCombo_->currentIndex() >= 0 && contourCheck_->isChecked());
+}
 
-    pickNodeAction_->setVisible(showPicking);
-    pickElementAction_->setVisible(showPicking);
-
-    solveAction_->setVisible(workspace_ == Workspace::Solve);
-    viewResultsAction_->setVisible(workspace_ == Workspace::Solve);
-
-    resultPanel_->setEnabled(hasResults);
+void MainWindow::showResultOptions() {
+    if (!switchWorkspace(Workspace::Postprocess)) {
+        updateActionStates();
+        return;
+    }
+    contourCheck_->setChecked(true);
+    updateResultDisplay();
+    resultDialog_->adjustSize();
+    QPoint anchor = analysisPalette_->mapToGlobal(QPoint(analysisPalette_->width() + 14, 0));
+    QScreen *screen = QGuiApplication::screenAt(anchor);
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        const QRect bounds = screen->availableGeometry().adjusted(8, 8, -8, -8);
+        anchor.setX(std::clamp(anchor.x(), bounds.left(), std::max(bounds.left(), bounds.right() - resultDialog_->width() + 1)));
+        anchor.setY(std::clamp(anchor.y(), bounds.top(), std::max(bounds.top(), bounds.bottom() - resultDialog_->height() + 1)));
+    }
+    resultDialog_->move(anchor);
+    resultDialog_->show();
+    resultDialog_->raise();
+    resultDialog_->activateWindow();
 }
 
 void MainWindow::updateResultDisplay() {
-    const bool hasField = fieldCombo_->currentIndex() > 0;
-    const bool showContour =
-        workspace_ == Workspace::Postprocess && resultGrid_.GetPointer() != nullptr && hasField && contourCheck_->isChecked();
-
-    componentCombo_->setEnabled(hasField);
-    legendCheck_->setEnabled(hasField && contourCheck_->isChecked());
-
+    const int component = componentCombo_->currentIndex();
+    const bool hasComponent = component >= 0 && component <= 3;
+    const bool showContour = workspace_ == Workspace::Postprocess && resultGrid_ && hasComponent && contourCheck_->isChecked();
+    legendCheck_->setEnabled(hasComponent && contourCheck_->isChecked());
+    viewResultsAction_->setChecked(showContour);
     if (!showContour) {
         viewport_->clearContour();
         return;
     }
-
-    const bool displacement = fieldCombo_->currentIndex() == 1;
-    const QString prefix = displacement ? QStringLiteral("Displacement") : QStringLiteral("Reaction");
-
-    const QString symbol = displacement ? QStringLiteral("U") : QStringLiteral("RF");
-
-    static const char *suffixes[] = {"Magnitude", "X", "Y", "Z"};
-
-    const int component = componentCombo_->currentIndex();
-    const QString arrayName = prefix + QString::fromLatin1(suffixes[component]);
-
-    const QString title =
-        component == 0 ? symbol + QStringLiteral(" Magnitude") : symbol + QString::number(component) + QStringLiteral(" (global)");
-
-    const QByteArray arrayBytes = arrayName.toUtf8();
-    const QByteArray titleBytes = title.toUtf8();
-
-    if (!viewport_->setContour(arrayBytes.constData(), titleBytes.constData(), legendCheck_->isChecked())) {
+    static const char *arrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
+    static const char *titles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
+    if (!viewport_->setContour(arrays[component], titles[component], legendCheck_->isChecked())) {
         viewport_->clearContour();
-        logWidget_->appendPlainText(tr("无法显示结果数组：%1").arg(arrayName));
+        viewResultsAction_->setChecked(false);
+        logWidget_->appendPlainText(tr("无法显示位移数组：%1").arg(QString::fromLatin1(arrays[component])));
     }
 }
 
 void MainWindow::onOpenFile() {
     if (solving_)
         return;
-    const QString filter = tr("Mesh files (*.msh *.vtu *.vtk *.inp)");
-    const QString path = QFileDialog::getOpenFileName(this, tr("Open File"), QString(), filter);
-    if (path.isEmpty())
-        return;
-    AbaqusInpReader reader;
-    auto readresult = reader.read(std::filesystem::path(path.toStdWString()));
-    for (const std::string &warning : readresult.warnings)
-        logWidget_->appendPlainText(QString::fromStdString(warning));
-    if (!readresult.success()) {
-        logWidget_->appendPlainText(QString::fromStdString(readresult.error));
+
+    while (true) {
+        const QString selected = QFileDialog::getExistingDirectory(
+            this, tr("选择包含唯一 INP 文件的工作目录"), workingDirectory_);
+        if (selected.isEmpty())
+            return;
+
+        const QDir directory(selected);
+        QFileInfoList inputFiles;
+        const auto files = directory.entryInfoList(QDir::Files | QDir::Hidden);
+        for (const QFileInfo &file : files) {
+            if (file.suffix().compare(QStringLiteral("inp"), Qt::CaseInsensitive) == 0)
+                inputFiles.append(file);
+        }
+        if (inputFiles.size() != 1) {
+            QMessageBox::warning(this, tr("工作目录无效"),
+                                 tr("工作目录中必须恰好包含一个 INP 文件。\n当前找到：%1 个。")
+                                     .arg(inputFiles.size()));
+            continue;
+        }
+
+        const QFileInfo inputInfo = inputFiles.front();
+        const QString inputPath = inputInfo.absoluteFilePath();
+        QString error;
+        const QByteArray inputHash = DisplacementResultIO::fingerprint(inputPath, error);
+        if (inputHash.isEmpty()) {
+            QMessageBox::warning(this, tr("读取失败"), error);
+            continue;
+        }
+
+        AbaqusInpReader reader;
+        auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()));
+        for (const auto &warning : readResult.warnings)
+            logWidget_->appendPlainText(QString::fromStdString(warning));
+        if (!readResult.success()) {
+            QMessageBox::warning(this, tr("模型读取失败"), QString::fromStdString(readResult.error));
+            continue;
+        }
+        const QByteArray hashAfterRead = DisplacementResultIO::fingerprint(inputPath, error);
+        if (hashAfterRead.isEmpty() || hashAfterRead != inputHash) {
+            QMessageBox::warning(this, tr("模型读取失败"), tr("读取期间 INP 文件发生变化或无法访问，请重新选择。"));
+            continue;
+        }
+        const auto built = vtkBuilder{}.build(readResult.model.mesh);
+        if (!built.success()) {
+            QMessageBox::warning(this, tr("网格构建失败"), built.error);
+            continue;
+        }
+
+        // 验证成功后才替换当前模型；取消或失败不会丢失已打开的模型。
+        workingDirectory_ = directory.absolutePath();
+        inputFilePath_ = inputPath;
+        inputFingerprint_ = inputHash;
+        resultFilePath_ = directory.filePath(inputInfo.completeBaseName() + QStringLiteral(".displacement.csv"));
+        currentModel_ = std::move(readResult.model);
+        modelGrid_ = built.grid;
+        resultGrid_ = nullptr;
+        {
+            const QSignalBlocker componentBlocker(componentCombo_);
+            const QSignalBlocker contourBlocker(contourCheck_);
+            const QSignalBlocker legendBlocker(legendCheck_);
+            componentCombo_->setCurrentIndex(-1);
+            contourCheck_->setChecked(true);
+            legendCheck_->setChecked(true);
+        }
+        const bool hasResultFile = QFileInfo(resultFilePath_).isFile();
+        switchWorkspace(Workspace::Preprocess);
+        viewport_->setMesh(modelGrid_, true, true);
+        setWindowTitle(tr("CAEStudio — %1").arg(workingDirectory_));
+        logWidget_->appendPlainText(tr("工作目录：%1").arg(workingDirectory_));
+        logWidget_->appendPlainText(tr("已加载模型：%1").arg(inputFilePath_));
+        if (hasResultFile)
+            logWidget_->appendPlainText(tr("发现结果文件：%1\n进入后处理时将检查并读取。").arg(resultFilePath_));
         return;
     }
-    vtkBuilder builder;
-    const auto vtkdata = builder.build(readresult.model.mesh);
-    if (!vtkdata.success()) {
-        logWidget_->appendPlainText(vtkdata.error);
-        return;
-    }
-    currentModel_ = std::move(readresult.model);
-    modelGrid_ = vtkdata.grid;
-    resultGrid_ = nullptr;
-
-    {
-        const QSignalBlocker fieldBlocker(fieldCombo_);
-        const QSignalBlocker componentBlocker(componentCombo_);
-        fieldCombo_->setCurrentIndex(0);
-        componentCombo_->setCurrentIndex(0);
-    }
-
-    solveStatusLabel_->setText(tr("尚未求解"));
-    updateModelTree();
-    infoTable_->setRowCount(0);
-
-    // 先清理工作区状态，再启动新模型的导入动画
-    switchWorkspace(Workspace::Preprocess);
-    viewport_->setMesh(modelGrid_, true, true);
-    // 加载成功打印日志
-    logWidget_->appendPlainText(tr("模型加载成功: %1 个节点, %2 个单元, %3 种材料.")
-                                    .arg(static_cast<qulonglong>(currentModel_.mesh.nodes.size()))
-                                    .arg(static_cast<qulonglong>(currentModel_.mesh.elements.size()))
-                                    .arg(static_cast<qulonglong>(currentModel_.materials.size())));
 }
 
+
+bool MainWindow::loadSavedResults() {
+    QString error;
+    const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
+    if (currentHash.isEmpty()) {
+        QMessageBox::warning(this, tr("结果读取失败"), error);
+        return false;
+    }
+    if (currentHash != inputFingerprint_) {
+        QMessageBox::warning(this, tr("模型已变化"),
+                             tr("INP 文件已被修改。\n请重新选择工作目录以加载新模型，然后重新求解。"));
+        return false;
+    }
+    const auto loaded = DisplacementResultIO::load(resultFilePath_, modelGrid_, inputFingerprint_);
+    if (!loaded.success()) {
+        QMessageBox::warning(this, tr("结果读取失败"), loaded.error);
+        return false;
+    }
+    resultGrid_ = loaded.grid;
+    viewport_->setMesh(resultGrid_, false, false);
+    logWidget_->appendPlainText(tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
+    return true;
+}
+
+
 void MainWindow::onSolve() {
-    if (solving_ || !modelGrid_)
+    if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
         return;
+    QString error;
+    const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
+    if (currentHash.isEmpty()) {
+        QMessageBox::warning(this, tr("无法求解"), error);
+        return;
+    }
+    if (currentHash != inputFingerprint_) {
+        QMessageBox::warning(this, tr("无法求解"), tr("INP 文件已被修改，请重新选择工作目录加载模型。"));
+        return;
+    }
 
     solving_ = true;
-    solveStatusLabel_->setText(tr("正在求解…"));
     switchWorkspace(Workspace::Solve);
+    updateActionStates();
     logWidget_->appendPlainText(tr("正在求解…"));
 
-    auto *watcher = new QFutureWatcher<vtkBuildResult>(this);
-
-    connect(watcher, &QFutureWatcher<vtkBuildResult>::finished, this, [this, watcher]() {
-        const auto result = watcher->result();
+    // 空字符串表示成功，后台临时结果网格不直接交给显示层。
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]() {
+        const QString jobError = watcher->result();
         watcher->deleteLater();
         solving_ = false;
-
-        if (!result.success()) {
-            solveStatusLabel_->setText(resultGrid_ ? tr("本次求解失败，保留上次成功结果") : tr("求解失败"));
-            logWidget_->appendPlainText(result.error);
+        if (!jobError.isEmpty()) {
+            logWidget_->appendPlainText(jobError);
             updateActionStates();
             return;
         }
-
-        resultGrid_ = result.grid;
-
-        // 同一模型只补充结果数据，保留当前相机。
-        // 此处不启用云图。
-        viewport_->setMesh(resultGrid_, false, false);
-
-        infoTable_->setRowCount(0);
-        solveStatusLabel_->setText(tr("求解完成"));
         updateActionStates();
-
-        // 若用户在求解过程中切换了工作区，
-        // 按当前工作区及原有选择恢复显示。
-        updateResultDisplay();
-
-        logWidget_->appendPlainText(tr("求解完成。点击“查看结果”后选择物理量和分量。"));
+        logWidget_->appendPlainText(tr("位移结果已保存：%1").arg(resultFilePath_));
+        logWidget_->appendPlainText(tr("点击云图图标，读取结果并选择位移分量。"));
     });
 
-    watcher->setFuture(QtConcurrent::run([model = currentModel_]() -> vtkBuildResult {
+    watcher->setFuture(QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_,
+                                        inputHash = inputFingerprint_]() -> QString {
         try {
             const AnalysisModel analysis(model);
             const auto stiffness = analysis.assembleElasticStiffness();
             const auto solution = analysis.solveLinearStatic(stiffness);
-
-            return vtkBuilder{}.buildResults(model.mesh, analysis, solution);
+            const auto built = vtkBuilder{}.buildResults(model.mesh, analysis, solution);
+            if (!built.success())
+                return built.error;
+            QString saveError;
+            if (!DisplacementResultIO::save(outputPath, built.grid, inputHash, saveError))
+                return saveError;
+            return {};
         } catch (const std::exception &error) {
-            return {nullptr, QString::fromUtf8(error.what())};
+            return QString::fromUtf8(error.what());
         }
     }));
 }

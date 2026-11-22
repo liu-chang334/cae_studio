@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 # 设置编译选项, 防止中文乱码
 if(MSVC)
@@ -25,6 +26,7 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS
   Widgets
   Concurrent
   OpenGLWidgets
+  Svg
 )
 find_package(VTK CONFIG REQUIRED COMPONENTS
   CommonCore
@@ -53,10 +55,13 @@ add_subdirectory(test)
 add_executable(CAEStudio 
   main.cpp
   src/MainWindow.cpp
+  src/MinimalUi.cpp
+  resources/icons.qrc
   src/vtkScene.cpp
   src/MeshViewport.cpp
   src/AbaqusInpReader.cpp
   src/vtkBuilder.cpp
+  src/DisplacementResultIO.cpp
   src/C3D8Element.cpp # C3D8单元几何计算实现
   src/LinearElastic.cpp # 线性弹性材料实现
   src/AnalysisModel.cpp # 计算模型实现
@@ -80,6 +85,7 @@ target_link_libraries(CAEStudio PRIVATE
   Qt6::Widgets
   Qt6::Concurrent
   Qt6::OpenGLWidgets
+  Qt6::Svg
   VTK::GUISupportQt
   VTK::RenderingOpenGL2
   VTK::InteractionWidgets

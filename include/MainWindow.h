@@ -2,105 +2,58 @@
 
 #include "FEModel.h"
 
+#include <QByteArray>
 #include <QMainWindow>
+#include <QString>
 #include <vtkSmartPointer.h>
+#include <vtkUnstructuredGrid.h>
 
-class MeshViewport;
-class QTreeWidget;
-class QTreeWidgetItem;
-class QPlainTextEdit;
-class QTableWidget;
-class QToolBar;
-class QStackedWidget;
-class QWidget;
-class QLabel;
-class QPushButton;
-class QComboBox;
-class QCheckBox;
 class QAction;
+class QCheckBox;
+class QComboBox;
+class QDialog;
+class QPlainTextEdit;
+class FloatingToolPalette;
+class SoftLogPanel;
+class MeshViewport;
 
-class vtkUnstructuredGrid;
-
-/**
- * @brief 程序主窗口
- */
 class MainWindow : public QMainWindow {
-    /**
-     * @brief 定义宏,使signal/slot机制生效
-     */
     Q_OBJECT
 
 public:
-    /**
-     * @brief 构造函数
-     * @param parent 父窗口指针
-     */
     explicit MainWindow(QWidget *parent = nullptr);
-
-    /**
-     * @brief 析构函数
-     */
     ~MainWindow() override = default;
 
-private:
-    enum class Workspace { Preprocess = 0, Solve = 1, Postprocess = 2 };
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
-    /**
-     * @brief 打开文件
-     */
     void onOpenFile();
-
-    /**
-     * @brief 求解
-     */
     void onSolve();
-
-    /**
-     * @brief 更新后处理
-     */
+    void showResultOptions();
     void updateResultDisplay();
 
 private:
-    void setupModelPanel();
-    void setupInfoTable();
+    enum class Workspace { Preprocess, Solve, Postprocess };
+
     void setupLogWidget();
-    void setupWorkspacePanels();
     void setupCentral();
-    void setupToolBar();
-    void updateModelTree();
+    void setupResultPopup();
+    void setupToolPalettes();
+    void layoutOverlays();
     void showElementInfo(MeshId elementId);
     void showNodeInfo(MeshId nodeId);
-    void switchWorkspace(Workspace workspace);
+    bool switchWorkspace(Workspace workspace);
     void updateActionStates();
-
-private:
-    QTreeWidget *modelTree_ = nullptr;
-    QTreeWidgetItem *nodeItem_ = nullptr;
-    QTreeWidgetItem *elemItem_ = nullptr;
-    QTreeWidgetItem *nsetItem_ = nullptr;
-    QTreeWidgetItem *esetItem_ = nullptr;
-    QTreeWidgetItem *materialItem_ = nullptr;
-    QTreeWidgetItem *boundaryItem_ = nullptr;
-    QTreeWidgetItem *loadItem_ = nullptr;
+    bool loadSavedResults();
 
     QPlainTextEdit *logWidget_ = nullptr;
-    QTableWidget *infoTable_ = nullptr;
+    SoftLogPanel *logPanel_ = nullptr;
     MeshViewport *viewport_ = nullptr;
+    FloatingToolPalette *selectionPalette_ = nullptr;
+    FloatingToolPalette *analysisPalette_ = nullptr;
 
-    QToolBar *toolBar_ = nullptr;
-    QToolBar *workspaceToolBar_ = nullptr;
-    QTabBar *workspaceTabs_ = nullptr;
-
-    QStackedWidget *navigationStack_ = nullptr;
-    QWidget *solvePanel_ = nullptr;
-    QWidget *resultPanel_ = nullptr;
-
-    QLabel *solveStatusLabel_ = nullptr;
-    QPushButton *solveButton_ = nullptr;
-    QPushButton *viewResultsButton_ = nullptr;
-
-    QComboBox *fieldCombo_ = nullptr;
+    QDialog *resultDialog_ = nullptr;
     QComboBox *componentCombo_ = nullptr;
     QCheckBox *contourCheck_ = nullptr;
     QCheckBox *legendCheck_ = nullptr;
@@ -113,7 +66,11 @@ private:
 
     Workspace workspace_ = Workspace::Preprocess;
     bool solving_ = false;
-
+    bool palettesPlaced_ = false;
+    QString workingDirectory_;
+    QString inputFilePath_;
+    QString resultFilePath_;
+    QByteArray inputFingerprint_;
     FEModel currentModel_;
     vtkSmartPointer<vtkUnstructuredGrid> modelGrid_;
     vtkSmartPointer<vtkUnstructuredGrid> resultGrid_;
