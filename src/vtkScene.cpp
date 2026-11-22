@@ -45,105 +45,131 @@ vtkScene::vtkScene() : renderer_(vtkSmartPointer<vtkRenderer>::New()) {
 
 vtkRenderer *vtkScene::renderer() const { return renderer_.GetPointer(); }
 
-void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
-    if (!grid)  // 1. 空网格直接返回
+void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool resetView) {
+    if (!grid)
         return;
-    constexpr int colorLevels = 13;  // 云图与图例共用分级数
-    // 2.1 装填映射器
-    auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
-    mapper->SetInputData(grid);
-    vtkDataArray *magnitude = nullptr;
-    if (showResults) {
-        magnitude = grid->GetPointData()->GetArray("DisplacementMagnitude");  // 总位移标量场(节点值)
-        double range[2];
-        magnitude->GetRange(range);  // 取min和max分别写入range[0]和range[1]
-        const double minValue = range[0];
-        const double maxValue = range[1];
-        const double midValue = minValue + (maxValue - minValue) * 0.5;
-        // 云图方案1: HSV颜色模型, 蓝->绿->红
-        // auto colors = vtkSmartPointer<vtkLookupTable>::New();  // 颜色查找表
-        // colors->SetHueRange(2.0 / 3.0, 0.0);  // HSV色相范围,从蓝色(2/3,0)到红色(0/3,0)
-        // colors->SetTableRange(range);  // 设置场值范围
-        // colors->SetSaturationRange(0.6, 0.6);
-        // colors->SetValueRange(1.0, 1.0);
-        // colors->Build();  // 构建颜色映射关系
 
-        // 云图方案2: 蓝->白->红
-        auto colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
-        colors->SetColorSpaceToLab();
-        const double span = maxValue - minValue;
-        const double colorSaturation = 1.55;  // 颜色浓度：1.0 为原配色，越大越浓。
-        auto addColor = [&](double t, double r, double g, double b) {
-            const double peak = std::max({r, g, b});
-            auto saturate = [&](double channel) { return std::clamp(peak - (peak - channel) * colorSaturation, 0.0, 1.0); };
-            colors->AddRGBPoint(minValue + t * span, saturate(r), saturate(g), saturate(b));
-        };
-        addColor(0.00, 0.25, 0.44, 0.70);  // 柔和蓝
-        addColor(0.20, 0.47, 0.66, 0.82);  // 中蓝
-        addColor(0.40, 0.79, 0.87, 0.93);  // 浅蓝
-        colors->AddRGBPoint(midValue, 0.96, 0.96, 0.95);  // 柔白中心保持不变
-        addColor(0.60, 0.96, 0.84, 0.79);  // 浅红
-        addColor(0.80, 0.87, 0.59, 0.51);  // 中红
-        addColor(1.00, 0.72, 0.32, 0.31);  // 柔和红
-
-        colors->DiscretizeOn();  // 每个数值区间使用固定颜色
-        colors->SetNumberOfValues(colorLevels);
-        colors->Build();  // 颜色控制点设置完成后生成离散色表
-
-        mapper->SetLookupTable(colors);  // 装填颜色关系
-        mapper->UseLookupTableScalarRangeOn();  // 启用
-        mapper->SetScalarModeToUsePointFieldData();  // 使用节点值数据
-        mapper->SelectColorArray("DisplacementMagnitude");  // 具体数组
-        mapper->InterpolateScalarsBeforeMappingOn();  // 启用先插值后映射
-        mapper->ScalarVisibilityOn();  // 启用标量着色
-    } else
-        mapper->ScalarVisibilityOff();
-    // 2.2 装填场景对象
-    auto actor = vtkSmartPointer<vtkActor>::New();
-    actor->SetMapper(mapper);
-    // 2.3 设置场景对象属性
-    // actor->GetProperty()->SetColor(10 / 255.0, 108 / 255.0, 85 / 255.0); // 实际由渐变颜色控制
-    actor->GetProperty()->EdgeVisibilityOff();  // 不显示边线
-    actor->GetProperty()->SetEdgeColor(0.0, 0.0, 0.0);  // rgb(0, 0, 0)
-    actor->GetProperty()->SetLineWidth(1.5);  // 边线宽度
-    // 3.1 清除旧对象
+    vtkSmartPointer<vtkUnstructuredGrid> incoming = grid;
     clear();
-    // 3.2 替换新对象
-    grid_ = grid;
-    meshActor_ = actor;
+    grid_ = incoming;
+    auto mapper = vtkSmartPointer<vtkDataSetMapper>::New();
+    mapper->SetInputData(grid_);
+    mapper->ScalarVisibilityOff();
+    meshActor_ = vtkSmartPointer<vtkActor>::New();
+    meshActor_->SetMapper(mapper);
+    meshActor_->GetProperty()->EdgeVisibilityOff();
     renderer_->AddActor(meshActor_);
-    buildMeshEdges(showResults);
-    if (magnitude) {
-        meshActor_->GetProperty()->LightingOff();
-        scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
-        scalarBar_->SetTitle("Total\nDisplacement");
-        scalarBar_->SetOrientationToVertical();
-        scalarBar_->SetPosition(0.87, 0.20);  // 左下角位置，使用视口比例
-        scalarBar_->SetWidth(0.10);  // 整个图例区域宽度，占视口的 10%
-        scalarBar_->SetHeight(0.55);  // 图例区域高度，占视口的 70%
-        scalarBar_->SetBarRatio(0.25);  // 彩色条占图例横向空间的比例
-        scalarBar_->SetMaximumNumberOfColors(colorLevels);  // 与模型云图使用相同的分级数
-        scalarBar_->SetNumberOfLabels(12);  // 数值标签数量，独立于色块数量
-        scalarBar_->UnconstrainedFontSizeOn();  // 使用指定字号
-        scalarBar_->GetTitleTextProperty()->SetFontFamily(VTK_FONT_FILE);
-        scalarBar_->GetTitleTextProperty()->SetFontFile("C:/Windows/Fonts/timesbi.ttf");  // Times New Roman 粗斜体
-        scalarBar_->GetTitleTextProperty()->BoldOn();
-        scalarBar_->GetTitleTextProperty()->ItalicOn();
-        scalarBar_->GetLabelTextProperty()->SetFontFamily(VTK_FONT_FILE);
-        scalarBar_->GetLabelTextProperty()->SetFontFile("C:/Windows/Fonts/timesbi.ttf");
-        scalarBar_->GetLabelTextProperty()->BoldOn();
-        scalarBar_->GetLabelTextProperty()->ItalicOn();
-        scalarBar_->GetTitleTextProperty()->SetFontSize(16);  // 标题字号
-        scalarBar_->GetLabelTextProperty()->SetFontSize(16);  // 数值标签字号
-        scalarBar_->SetLookupTable(mapper->GetLookupTable());
-        scalarBar_->GetTitleTextProperty()->SetColor(0.0, 0.0, 0.0);  // 标题颜色
-        scalarBar_->GetLabelTextProperty()->SetColor(0.0, 0.0, 0.0);  // 数值标签颜色
-        renderer_->AddActor2D(scalarBar_);
-    } else {
-        setMeshRevealProgress(showResults ? 1.0 : 0.0);
+    buildMeshEdges(true);
+    setMeshRevealProgress(1.0);
+    if (resetView)
+        resetCamera();
+    else
+        renderer_->ResetCameraClippingRange();
+}
+
+bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend) {
+    if (!grid_ || !meshActor_ || !arrayName)
+        return false;
+    auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
+    auto *array = grid_->GetPointData()->GetArray(arrayName);
+    if (!mapper || !array || array->GetNumberOfComponents() != 1 || array->GetNumberOfTuples() != grid_->GetNumberOfPoints() ||
+        array->GetNumberOfTuples() == 0) {
+        return false;
     }
-    // 6. 重置相机
-    resetCamera();
+    // 1. 获取当前选中结果的范围
+    double range[2];
+    array->GetRange(range);
+    if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0] > range[1])
+        return false;
+    // 常量场：适当扩展范围，避免颜色控制点全部重合
+    if (range[0] == range[1]) {
+        const double padding = std::max(std::abs(range[0]) * 1.0e-6, 1.0e-12);
+        range[0] -= padding;
+        range[1] += padding;
+    }
+    constexpr int colorLevels = 13;
+    const double minValue = range[0];
+    const double maxValue = range[1];
+    const double span = maxValue - minValue;
+    const double midValue = minValue + span * 0.5;
+    // 2. 保留原来的蓝 -> 白 -> 红配色
+    auto colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
+    colors->SetColorSpaceToLab();
+    const double colorSaturation = 1.55;
+    auto addColor = [&](double t, double r, double g, double b) {
+        const double peak = std::max({r, g, b});
+        auto saturate = [&](double channel) { return std::clamp(peak - (peak - channel) * colorSaturation, 0.0, 1.0); };
+        colors->AddRGBPoint(minValue + t * span, saturate(r), saturate(g), saturate(b));
+    };
+    addColor(0.00, 0.25, 0.44, 0.70);  // 柔和蓝
+    addColor(0.20, 0.47, 0.66, 0.82);  // 中蓝
+    addColor(0.40, 0.79, 0.87, 0.93);  // 浅蓝
+    // 柔白中心保持不变
+    colors->AddRGBPoint(midValue, 0.96, 0.96, 0.95);
+    addColor(0.60, 0.96, 0.84, 0.79);  // 浅红
+    addColor(0.80, 0.87, 0.59, 0.51);  // 中红
+    addColor(1.00, 0.72, 0.32, 0.31);  // 柔和红
+    colors->DiscretizeOn();
+    colors->SetNumberOfValues(colorLevels);
+    colors->Build();
+    // 3. 使用当前选中的结果数组着色
+    mapper->SetLookupTable(colors);
+    mapper->UseLookupTableScalarRangeOn();
+    mapper->SetScalarModeToUsePointFieldData();
+    // 由参数决定数组，不再固定为总位移
+    mapper->SelectColorArray(arrayName);
+    mapper->InterpolateScalarsBeforeMappingOn();
+    mapper->ScalarVisibilityOn();
+    meshActor_->GetProperty()->LightingOff();
+    // 4. 色标只创建一次，切换结果时复用
+    if (!scalarBar_) {
+        scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
+        scalarBar_->SetOrientationToVertical();
+        scalarBar_->SetPosition(0.87, 0.20);
+        scalarBar_->SetWidth(0.10);
+        scalarBar_->SetHeight(0.55);
+        scalarBar_->SetBarRatio(0.25);
+        scalarBar_->SetMaximumNumberOfColors(colorLevels);
+        scalarBar_->SetNumberOfLabels(12);
+        scalarBar_->UnconstrainedFontSizeOn();
+        // 标题：Times New Roman 粗斜体
+        auto *titleText = scalarBar_->GetTitleTextProperty();
+        titleText->SetFontFamily(VTK_FONT_FILE);
+        titleText->SetFontFile("C:/Windows/Fonts/timesbi.ttf");
+        titleText->BoldOn();
+        titleText->ItalicOn();
+        titleText->SetFontSize(16);
+        titleText->SetColor(0.0, 0.0, 0.0);
+        titleText->ShadowOff();
+        // 数值标签：Times New Roman 粗斜体
+        auto *labelText = scalarBar_->GetLabelTextProperty();
+        labelText->SetFontFamily(VTK_FONT_FILE);
+        labelText->SetFontFile("C:/Windows/Fonts/timesbi.ttf");
+        labelText->BoldOn();
+        labelText->ItalicOn();
+        labelText->SetFontSize(16);
+        labelText->SetColor(0.0, 0.0, 0.0);
+        labelText->ShadowOff();
+        renderer_->AddActor2D(scalarBar_);
+    }
+    // 5. 每次切换结果都更新标题、颜色映射与可见性
+    scalarBar_->SetTitle(title ? title : arrayName);
+    scalarBar_->SetLookupTable(mapper->GetLookupTable());
+    scalarBar_->SetVisibility(showLegend);
+
+    return true;
+}
+
+void vtkScene::clearContour() {
+    if (scalarBar_)
+        scalarBar_->SetVisibility(false);
+    if (!meshActor_)
+        return;
+    auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
+    if (mapper)
+        mapper->ScalarVisibilityOff();
+    meshActor_->GetProperty()->LightingOn();
+    setMeshRevealProgress(1.0);
 }
 
 void vtkScene::clear() {

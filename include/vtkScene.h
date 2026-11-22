@@ -25,13 +25,11 @@ public:
      */
     vtkRenderer *renderer() const;
 
-    /**
-     * @brief 设置网格
-     * @param grid 网格指针
-     * @param showResults 是否显示求解结果
-     * @details 显示网格, 并重置导入动画进度为0
-     */
-    void setMesh(vtkUnstructuredGrid *grid, bool showResults = false);
+    void setMesh(vtkUnstructuredGrid *grid, bool resetView = true);
+
+    bool setContour(const char *arrayName, const char *title, bool showLegend = true);
+
+    void clearContour();
 
     // void setMeshOpacity(double opacity);
 

@@ -24,9 +24,15 @@ public:
     /**
      * @brief 添加网格
      * @param grid 网格数据
+     * @param animateImport 是否显示导入动画
+     * @param resetView 是否重置相机
      * @details 显示网格, 并开始导入动画
      */
-    void setMesh(vtkUnstructuredGrid *grid, bool showResults = false);
+    void setMesh(vtkUnstructuredGrid *grid, bool animateImport = true, bool resetView = true);
+
+    bool setContour(const char *arrayName, const char *title, bool showLegend = true);
+
+    void clearContour();
 
     /**
      * @brief 清除网格, 停止所有动画

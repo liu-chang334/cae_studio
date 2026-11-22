@@ -2,18 +2,24 @@
 
 #include "FEModel.h"
 
-#include <QFileDialog>
-#include <QFutureWatcher>
 #include <QMainWindow>
-#include <QPlainTextEdit>
-#include <QSplitter>
-#include <QTableWidget>
-#include <QToolBar>
-#include <QTreeWidget>
-#include <QVTKOpenGLNativeWidget.h>
-#include <QtConcurrentRun>
+#include <vtkSmartPointer.h>
 
 class MeshViewport;
+class QTreeWidget;
+class QTreeWidgetItem;
+class QPlainTextEdit;
+class QTableWidget;
+class QToolBar;
+class QStackedWidget;
+class QWidget;
+class QLabel;
+class QPushButton;
+class QComboBox;
+class QCheckBox;
+class QAction;
+
+class vtkUnstructuredGrid;
 
 /**
  * @brief 程序主窗口
@@ -34,149 +40,81 @@ public:
     /**
      * @brief 析构函数
      */
-    ~MainWindow() = default;
+    ~MainWindow() override = default;
+
+private:
+    enum class Workspace { Preprocess = 0, Solve = 1, Postprocess = 2 };
 
 private slots:
     /**
-     * @brief 打开文件槽函数
+     * @brief 打开文件
      */
     void onOpenFile();
 
     /**
-     * @brief 显示位移槽函数
+     * @brief 求解
      */
-    void onShowDisplacement();
+    void onSolve();
 
-    /// @brief 切换线框模式
-    /// @param checked true 表示启用,false 表示关闭
-    // void onToggleWireframe(bool checked);
-
-    /// @brief 切换缩放模式
-    /// @param checked true 表示启用,false 表示关闭
-    // void onToggleZoom(bool checked);
+    /**
+     * @brief 更新后处理
+     */
+    void updateResultDisplay();
 
 private:
-    /**
-     * @brief 初始化工具栏
-     */
-    void setupToolBar();
-
-    /**
-     * @brief 初始化中心区域
-     */
-    void setupCentral();
-
-    /**
-     * @brief 初始化模型面板
-     */
     void setupModelPanel();
-
-    /**
-     * @brief 根据当前网格更新模型树
-     */
-    void updateModelTree();
-
-    /**
-     * @brief 初始化信息表格
-     */
     void setupInfoTable();
-
-    /**
-     * @brief 在信息表格中显示选中单元信息
-     * @param elementId 选中单元编号
-     */
-    void showElementInfo(MeshId elementId);
-
-    /**
-     * @brief 在信息表格中显示选中节点信息
-     * @param nodeId 选中节点编号
-     */
-    void showNodeInfo(MeshId nodeId);
-
-    /**
-     * @brief 初始化日志窗口
-     */
     void setupLogWidget();
-
-    /// @brief 初始化悬停选择
-    // void setupHoverPicking();
-
-    /// @brief 初始化HUD栏
-    // void setupHudBar();
-
-    /// @brief 更新信息表格
-    // void updateInfoTable();
-
-    /**
-     * @brief 显示网格
-     */
-    void showGrid();
+    void setupWorkspacePanels();
+    void setupCentral();
+    void setupToolBar();
+    void updateModelTree();
+    void showElementInfo(MeshId elementId);
+    void showNodeInfo(MeshId nodeId);
+    void switchWorkspace(Workspace workspace);
+    void updateActionStates();
 
 private:
-    /**
-     * @brief 模型树
-     */
     QTreeWidget *modelTree_ = nullptr;
-
-    /**
-     * @brief 节点统计条目
-     */
     QTreeWidgetItem *nodeItem_ = nullptr;
-
-    /**
-     * @brief 单元统计条目
-     */
     QTreeWidgetItem *elemItem_ = nullptr;
-
-    /**
-     * @brief 节点集父条目
-     */
     QTreeWidgetItem *nsetItem_ = nullptr;
-
-    /**
-     * @brief 单元集父条目
-     */
     QTreeWidgetItem *esetItem_ = nullptr;
-
-    /**
-     * @brief 荷载父条目
-     */
+    QTreeWidgetItem *materialItem_ = nullptr;
+    QTreeWidgetItem *boundaryItem_ = nullptr;
     QTreeWidgetItem *loadItem_ = nullptr;
 
-    /**
-     * @brief 边界条件父条目
-     */
-    QTreeWidgetItem *boundaryItem_ = nullptr;
-
-    /**
-     * @brief 材料父条目
-     */
-    QTreeWidgetItem *materialItem_ = nullptr;
-
-    /**
-     * @brief 日志窗口
-     */
     QPlainTextEdit *logWidget_ = nullptr;
-
-    /**
-     * @brief 信息表格
-     */
     QTableWidget *infoTable_ = nullptr;
-
-    /**
-     * @brief 工具条
-     */
-    QToolBar *toolBar_ = nullptr;
-
-    /**
-     * @brief 网格视口
-     * @details 第1份数据, 用于vtk显示
-     */
     MeshViewport *viewport_ = nullptr;
 
-    /**
-     * @brief 当前有限元模型数据
-     * @details 第2份数据, 用于统计和构建计算模型
-     */
+    QToolBar *toolBar_ = nullptr;
+    QToolBar *workspaceToolBar_ = nullptr;
+    QTabBar *workspaceTabs_ = nullptr;
+
+    QStackedWidget *navigationStack_ = nullptr;
+    QWidget *solvePanel_ = nullptr;
+    QWidget *resultPanel_ = nullptr;
+
+    QLabel *solveStatusLabel_ = nullptr;
+    QPushButton *solveButton_ = nullptr;
+    QPushButton *viewResultsButton_ = nullptr;
+
+    QComboBox *fieldCombo_ = nullptr;
+    QComboBox *componentCombo_ = nullptr;
+    QCheckBox *contourCheck_ = nullptr;
+    QCheckBox *legendCheck_ = nullptr;
+
+    QAction *openAction_ = nullptr;
+    QAction *solveAction_ = nullptr;
+    QAction *viewResultsAction_ = nullptr;
+    QAction *pickNodeAction_ = nullptr;
+    QAction *pickElementAction_ = nullptr;
+
+    Workspace workspace_ = Workspace::Preprocess;
+    bool solving_ = false;
+
     FEModel currentModel_;
+    vtkSmartPointer<vtkUnstructuredGrid> modelGrid_;
+    vtkSmartPointer<vtkUnstructuredGrid> resultGrid_;
 };

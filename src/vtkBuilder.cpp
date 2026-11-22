@@ -77,24 +77,46 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
 
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisModel &analysis,
                                         const AnalysisModel::LinearStaticResult &solution) const {
+
     auto result = build(mesh);
     if (!result.success())
         return result;
-    if (solution.displacements.size() != analysis.globalDofCount())
-        return {nullptr, "全局位移向量维度与自由度数量不一致"};
+    if (solution.displacements.size() != analysis.globalDofCount() || solution.reactions.size() != analysis.globalDofCount())
+        return {nullptr, QStringLiteral("结果向量维度与自由度数量不一致")};
+
     auto displacements = vtkSmartPointer<vtkDoubleArray>::New();
     displacements->SetName("Displacements");
     displacements->SetNumberOfComponents(3);
-    auto magnitude = vtkSmartPointer<vtkDoubleArray>::New();
-    magnitude->SetName("DisplacementMagnitude");
-    magnitude->SetNumberOfComponents(1);
+
+    const std::array<const char *, 8> names = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ",
+                                               "ReactionMagnitude",     "ReactionX",     "ReactionY",     "ReactionZ"};
+
+    std::array<vtkSmartPointer<vtkDoubleArray>, 8> fields;
+
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        fields[i] = vtkSmartPointer<vtkDoubleArray>::New();
+        fields[i]->SetName(names[i]);
+        fields[i]->SetNumberOfComponents(1);
+    }
+
     for (const auto &node : mesh.nodes) {
         const auto dof = analysis.globalDofIndex(node.id, 1);
-        const double *u = solution.displacements.data() + dof;  // data()返回首元地址
-        displacements->InsertNextTypedTuple(u);  // 根据提前设定的分量宽度依次读取
-        magnitude->InsertNextValue(std::hypot(u[0], u[1], u[2]));  // 计算模长并存入数组
+        const double *u = solution.displacements.data() + dof;
+        const double *rf = solution.reactions.data() + dof;
+
+        displacements->InsertNextTypedTuple(u);
+
+        const std::array<double, 8> values = {std::hypot(u[0], u[1], u[2]),    u[0],  u[1],  u[2],
+                                              std::hypot(rf[0], rf[1], rf[2]), rf[0], rf[1], rf[2]};
+
+        for (std::size_t i = 0; i < fields.size(); ++i)
+            fields[i]->InsertNextValue(values[i]);
     }
-    result.grid->GetPointData()->SetVectors(displacements);  // 登记为向量数据
-    result.grid->GetPointData()->AddArray(magnitude);  // 登记为标量数据
+
+    result.grid->GetPointData()->SetVectors(displacements);
+
+    for (const auto &field : fields)
+        result.grid->GetPointData()->AddArray(field);
+
     return result;
 }

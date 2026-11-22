@@ -66,17 +66,61 @@ MeshViewport::~MeshViewport() {
     delete scene_;
 }
 
-void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool showResults) {
+void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool animateImport, bool resetView) {
     if (!grid)
         return;
+
     edgeAnimation_->stop();
     importAnimation_->stop();
-    scene_->setMesh(grid, showResults);
-    renderWindow()->Render();
-    if (showResults)
-        edgeAnimation_->start();
-    else
+
+    scene_->setMesh(grid, resetView);
+
+    if (animateImport) {
+        scene_->setMeshRevealProgress(0.0);
         importAnimation_->start();
+        // 导入结束后，已有的 finished 连接会启动边线动画。
+        renderWindow()->Render();
+    } else {
+        scene_->setMeshRevealProgress(1.0);
+        edgeAnimation_->start();
+        updateEdgeProgress(edgeAnimation_->currentValue());
+    }
+}
+
+bool MeshViewport::setContour(const char *arrayName, const char *title, bool showLegend) {
+    importAnimation_->stop();
+    // 完整显示网格后，恢复被清零的波浪强度。
+    scene_->setMeshRevealProgress(1.0);
+
+    const bool success = scene_->setContour(arrayName, title, showLegend);
+
+    // 切换结果时保留正在运行的动画相位。
+    if (success && edgeAnimation_->state() != QAbstractAnimation::Running)
+        edgeAnimation_->start();
+
+    if (edgeAnimation_->state() == QAbstractAnimation::Running)
+        updateEdgeProgress(edgeAnimation_->currentValue());
+    else
+        renderWindow()->Render();
+
+    return success;
+}
+
+void MeshViewport::clearContour() {
+    const bool wasImporting = importAnimation_->state() == QAbstractAnimation::Running;
+    importAnimation_->stop();
+
+    scene_->clearContour();
+
+    // 若打断了导入动画，直接接续边线动画。
+    if (wasImporting && edgeAnimation_->state() != QAbstractAnimation::Running)
+        edgeAnimation_->start();
+
+    // 关闭云图也会清零波浪强度，立即恢复当前动画帧。
+    if (edgeAnimation_->state() == QAbstractAnimation::Running)
+        updateEdgeProgress(edgeAnimation_->currentValue());
+    else
+        renderWindow()->Render();
 }
 
 void MeshViewport::clear() {
