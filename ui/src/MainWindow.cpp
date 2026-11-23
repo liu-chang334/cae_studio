@@ -23,6 +23,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPalette>
@@ -427,6 +428,17 @@ bool MainWindow::loadSavedResults() {
 void MainWindow::onSolve() {
     if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
         return;
+
+    const auto reductionLabel = tr("约化法");
+    const auto penaltyLabel = tr("乘大数法");
+    bool accepted = false;
+    const auto selectedMethod = QInputDialog::getItem(this, tr("线性静力求解"), tr("位移约束处理方法"),
+                                                      {reductionLabel, penaltyLabel}, 0, false, &accepted);
+    if (!accepted)
+        return;
+    const auto constraintMethod = selectedMethod == penaltyLabel ? LinearStaticConstraintMethod::Penalty
+                                                                : LinearStaticConstraintMethod::Reduction;
+
     QString error;
     const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
     if (currentHash.isEmpty()) {
@@ -441,7 +453,7 @@ void MainWindow::onSolve() {
     solving_ = true;
     switchWorkspace(Workspace::Solve);
     updateActionStates();
-    logWidget_->appendPlainText(tr("正在求解…"));
+    logWidget_->appendPlainText(tr("正在求解（%1）…").arg(selectedMethod));
 
     // 空字符串表示成功，后台临时结果网格不直接交给显示层。
     auto *watcher = new QFutureWatcher<QString>(this);
@@ -460,12 +472,12 @@ void MainWindow::onSolve() {
     });
 
     watcher->setFuture(
-        QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_]() -> QString {
+        QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
             try {
                 const AnalysisProblemBuilder builder(model);
                 const auto system = builder.buildLinearStaticSystem();
                 LinearStaticSolver solver;
-                const auto &solution = solver.solve(system);
+                const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
                 const auto built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
                 if (!built.success())
                     return built.error;

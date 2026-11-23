@@ -5,6 +5,7 @@
 #include <optional>
 
 enum class LinearStaticAlgorithm { Cholesky };
+enum class LinearStaticConstraintMethod { Reduction, Penalty };
 
 struct LinearStaticResult {
     linalg::VectorX displacements;
@@ -14,7 +15,8 @@ struct LinearStaticResult {
 class LinearStaticSolver {
 public:
     const LinearStaticResult &solve(const ConstrainedLinearSystem &system,
-                                    LinearStaticAlgorithm algorithm = LinearStaticAlgorithm::Cholesky);
+                                    LinearStaticAlgorithm algorithm = LinearStaticAlgorithm::Cholesky,
+                                    LinearStaticConstraintMethod constraintMethod = LinearStaticConstraintMethod::Reduction);
 
     const std::optional<LinearStaticResult> &result() const noexcept { return result_; }
 

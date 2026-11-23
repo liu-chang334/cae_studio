@@ -71,6 +71,21 @@ int main(int argc, char *argv[]) {
               std::abs(R[1] - 46.0 / 19.0) <= smallTol)) {
             throw std::runtime_error("Unexpected linear static displacement or reaction");
         }
+
+        LinearStaticSolver penaltySolver;
+        const auto &penaltySolution = penaltySolver.solve(
+            smallSystem, LinearStaticAlgorithm::Cholesky, LinearStaticConstraintMethod::Penalty);
+        constexpr double penaltyTolerance = 1e-7;
+        for (std::size_t dof = 0; dof < u.size(); ++dof) {
+            if (!(std::abs(penaltySolution.displacements[dof] - u[dof]) < penaltyTolerance &&
+                  std::abs(penaltySolution.reactions[dof] - R[dof]) < penaltyTolerance)) {
+                throw std::runtime_error("Penalty solution differs from the reduced solution");
+            }
+        }
+        if (!(std::abs(penaltySolution.displacements[1] - u[1]) > smallTol)) {
+            throw std::runtime_error("Penalty solution unexpectedly imposed the displacement exactly");
+        }
+
         const auto result = AbaqusInpReader{}.read(argv[1]);
         if (!result.success())
             throw std::runtime_error(result.error);
@@ -110,20 +125,22 @@ int main(int argc, char *argv[]) {
         if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
             throw std::runtime_error("Shared node stiffness was not assembled correctly");
 
-        LinearStaticSolver jobSolver;
-        const auto &jobSolution = jobSolver.solve(system);
         const auto &forces = system.originalRhs;
-
         double appliedY = 0.0;
-        double reactionY = 0.0;
-        for (std::size_t dof = 1; dof < forces.size(); dof += 3) {
+        for (std::size_t dof = 1; dof < forces.size(); dof += 3)
             appliedY += forces[dof];
-            reactionY += jobSolution.reactions[dof];
-        }
 
-        if (appliedY != -78000.0 || !(std::abs(appliedY + reactionY) <= 1e-3)) {
-            throw std::runtime_error("job1: y-direction force balance failed (applied = " + std::to_string(appliedY) +
-                                     ", reaction = " + std::to_string(reactionY) + ")");
+        LinearStaticSolver jobSolver;
+        for (const auto method : {LinearStaticConstraintMethod::Reduction, LinearStaticConstraintMethod::Penalty}) {
+            const auto &jobSolution = jobSolver.solve(system, LinearStaticAlgorithm::Cholesky, method);
+            double reactionY = 0.0;
+            for (std::size_t dof = 1; dof < forces.size(); dof += 3)
+                reactionY += jobSolution.reactions[dof];
+
+            if (appliedY != -78000.0 || !(std::abs(appliedY + reactionY) <= 1e-3)) {
+                throw std::runtime_error("job1: y-direction force balance failed (applied = " + std::to_string(appliedY) +
+                                         ", reaction = " + std::to_string(reactionY) + ")");
+            }
         }
 
         std::cout << "AnalysisModel smoke test passed\n";
