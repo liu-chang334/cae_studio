@@ -1,7 +1,8 @@
 #include "AbaqusInpReader.h"
-#include "AnalysisModel.h"
+#include "AnalysisProblemBuilder.h"
 #include "C3D8Element.h"
 #include "LinearElastic.h"
+#include "LinearStaticSolver.h"
 #include "MaterialData.h"
 
 #include <algorithm>
@@ -14,7 +15,7 @@
 
 namespace {
 
-void checkElement(const AnalysisModel &analysis, std::size_t elementNumber, MeshId expectedSourceId,
+void checkElement(const AnalysisProblemBuilder &analysis, std::size_t elementNumber, MeshId expectedSourceId,
                   const IsotropicElasticData &expectedElastic) {
     const std::string label = "Element " + std::to_string(elementNumber);
 
@@ -53,28 +54,19 @@ int main(int argc, char *argv[]) {
     }
 
     try {
-        FEModel smallModel;
-        smallModel.mesh.nodes = {{42, {0.0, 0.0, 0.0}}};
-        smallModel.nodeSets["node"] = {42};
-        smallModel.boundaries.push_back({"node", 2, 2.0});
-        smallModel.loads.push_back({"node", 1, 10.0});
-        smallModel.loads.push_back({"node", 2, 1.0});
-        smallModel.loads.push_back({"node", 3, 7.0});
-
-        linalg::MatrixX smallK(3, 3);
-        smallK(0, 0) = 4.0;
-        smallK(1, 1) = 8.0;
-        smallK(2, 2) = 5.0;
-        smallK(0, 1) = smallK(1, 0) = -3.0;
-        smallK(0, 2) = smallK(2, 0) = 1.0;
-        smallK(1, 2) = smallK(2, 1) = 2.0;
-
-        const AnalysisModel smallAnalysis(smallModel);
-        const auto solution = smallAnalysis.solveLinearStatic(smallK);
+        ConstrainedLinearSystem smallSystem{linalg::MatrixX(3, 3), {10.0, 1.0, 7.0}, {std::nullopt, 2.0, std::nullopt}};
+        auto &A = smallSystem.originalCoefficientMatrix;
+        A(0, 0) = 4.0;
+        A(1, 1) = 8.0;
+        A(2, 2) = 5.0;
+        A(0, 1) = A(1, 0) = -3.0;
+        A(0, 2) = A(2, 0) = 1.0;
+        A(1, 2) = A(2, 1) = 2.0;
+        LinearStaticSolver smallSolver;
+        const auto &solution = smallSolver.solve(smallSystem);
         const auto &u = solution.displacements;
         const auto &R = solution.reactions;
         constexpr double smallTol = 1e-12;
-
         if (!(std::abs(u[0] - 77.0 / 19.0) <= smallTol && u[1] == 2.0 && std::abs(u[2] + 4.0 / 19.0) <= smallTol &&
               std::abs(R[1] - 46.0 / 19.0) <= smallTol)) {
             throw std::runtime_error("Unexpected linear static displacement or reaction");
@@ -83,7 +75,7 @@ int main(int argc, char *argv[]) {
         if (!result.success())
             throw std::runtime_error(result.error);
 
-        const AnalysisModel analysis(result.model);
+        const AnalysisProblemBuilder analysis(result.model);
         if (analysis.elementCount() != 625)
             throw std::runtime_error("Expected 625 elements, got " + std::to_string(analysis.elementCount()));
         if (analysis.globalDofCount() != 2808 || analysis.globalDofIndex(1, 1) != 0 || analysis.globalDofIndex(936, 3) != 2807) {
@@ -96,14 +88,15 @@ int main(int argc, char *argv[]) {
             {10, {1.0, 0.0, 0.0}},
         };
 
-        const AnalysisModel sparseAnalysis(sparseModel);
+        const AnalysisProblemBuilder sparseAnalysis(sparseModel);
         if (sparseAnalysis.globalDofCount() != 6 || sparseAnalysis.globalDofIndex(30, 2) != 1 ||
             sparseAnalysis.globalDofIndex(10, 3) != 5) {
             throw std::runtime_error("Unexpected DOF numbering for nonconsecutive node IDs");
         }
         checkElement(analysis, 300, 300, {2.1e9, 0.003});  // Mat-1
         checkElement(analysis, 301, 301, {3.2e9, 0.002});  // Mat-2
-        const auto K = analysis.assembleElasticStiffness();
+        const auto system = analysis.buildLinearStaticSystem();
+        const auto &K = system.originalCoefficientMatrix;
         if (K.rows() != 2808 || K.cols() != 2808)
             throw std::runtime_error("Unexpected global stiffness dimensions");
 
@@ -117,8 +110,10 @@ int main(int argc, char *argv[]) {
         if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
             throw std::runtime_error("Shared node stiffness was not assembled correctly");
 
-        const auto jobSolution = analysis.solveLinearStatic(K);
-        const auto &forces = analysis.forceVector();
+        LinearStaticSolver jobSolver;
+        const auto &jobSolution = jobSolver.solve(system);
+        const auto &forces = system.originalRhs;
+
         double appliedY = 0.0;
         double reactionY = 0.0;
         for (std::size_t dof = 1; dof < forces.size(); dof += 3) {

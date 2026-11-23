@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ConstrainedLinearSystem.h"
 #include "Matrix.h"
 #include "SolidElement3D.h"
 
@@ -8,32 +9,16 @@
 #include <unordered_map>
 
 struct FEModel;
-class AnalysisModel;
 
 /**
  * @brief 计算模型类
  * @details 用于存储和管理计算模型
  */
-class AnalysisModel {
+class AnalysisProblemBuilder {
 public:
-    explicit AnalysisModel(const FEModel &model);
+    explicit AnalysisProblemBuilder(const FEModel &model);
 
-    /**
-     * @brief 约化后的求解系统
-     */
-    struct ReducedSystem {
-        linalg::MatrixX stiffness;  // K_ff
-        linalg::VectorX rhs;  // F_f - K_fc * u_c
-        std::vector<std::size_t> freeDofs;  // 约化下标 -> 全局下标
-    };
-
-    /**
-     * @brief 线性静力分析结果
-     */
-    struct LinearStaticResult {
-        linalg::VectorX displacements;  // 全局位移
-        linalg::VectorX reactions;  // 约束反力
-    };
+    ConstrainedLinearSystem buildLinearStaticSystem() const;
 
     /**
      * @brief 向计算模型中添加一个单元
@@ -67,36 +52,6 @@ public:
      * @param[in] direction 方向, 1: x, 2: y, 3: z
      */
     std::size_t globalDofIndex(MeshId nodeId, int direction) const;
-
-    /**
-     * @brief 组装尚未施加位移约束的全局弹性刚度矩阵
-     * @return 全局弹性刚度矩阵
-     */
-    linalg::MatrixX assembleElasticStiffness() const;
-
-    /**
-     * @brief 对全局弹性刚度矩阵进行约化
-     * @param[in] K 全局弹性刚度矩阵
-     * @return 约化后的求解系统, 包含约化后的刚度矩阵和右端向量
-     */
-    ReducedSystem reduceElasticSystem(const linalg::MatrixX &K) const;
-
-    /**
-     * @brief 求解线性静力分析系统
-     * @param[in] K 全局弹性刚度矩阵
-     * @return 线性静力分析结果, 包含全局位移和约束反力
-     */
-    LinearStaticResult solveLinearStatic(const linalg::MatrixX &K) const;
-
-    /**
-     * @brief 返回外力边界条件
-     */
-    const linalg::VectorX &forceVector() const noexcept { return forceVector_; }
-
-    /**
-     * @brief 返回位移边界条件
-     */
-    const std::vector<std::optional<double>> &prescribedDisplacements() const noexcept { return prescribedDisplacements_; }
 
     /**
      * @brief 获取计算模型中指定1-based索引的单元的引用
@@ -136,6 +91,8 @@ private:
      * @details 初始化外力边界条件和位移边界条件
      */
     void initializeNodalConditions(const FEModel &model);
+
+    linalg::MatrixX assembleElasticStiffness() const;
 
 private:
     /**

@@ -7,7 +7,8 @@ add_executable(C3D8Smoke
 add_executable(AnalysisModelSmoke
     AnalysisModelSmoke.cpp
     ../io/src/AbaqusInpReader.cpp
-    ../solver/analysis/src/AnalysisModel.cpp
+    ../solver/analysis/src/AnalysisProblemBuilder.cpp
+    ../solver/analysis/src/LinearStaticSolver.cpp
     ../solver/elements/src/C3D8Element.cpp
     ../solver/materials/src/LinearElastic.cpp
 )

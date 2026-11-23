@@ -1,10 +1,13 @@
 #pragma once
 
-#include "AnalysisModel.h"
+#include "MeshData.h"
 
 #include <QString>
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
+
+class AnalysisProblemBuilder;
+struct LinearStaticResult;
 
 struct vtkBuildResult {
     vtkSmartPointer<vtkUnstructuredGrid> grid;
@@ -23,9 +26,9 @@ public:
     /**
      * @brief 从网格数据和计算结果中构建vtk网格, 用于显示计算结果
      * @param mesh 网格数据
-     * @param analysis 计算模型
+     * @param builder 计算问题构建器
      * @param solution 计算结果
      */
-    vtkBuildResult buildResults(const MeshData &mesh, const AnalysisModel &analysis,
-                                const AnalysisModel::LinearStaticResult &solution) const;
+    vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
+                                const LinearStaticResult &solution) const;
 };

@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "AbaqusInpReader.h"
+#include "AnalysisProblemBuilder.h"
 #include "DisplacementResultIO.h"
+#include "LinearStaticSolver.h"
 #include "MeshViewport.h"
 #include "MinimalUi.h"
 #include "vtkBuilder.h"
@@ -23,8 +25,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QPalette>
+#include <QPlainTextEdit>
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QStringList>
@@ -59,12 +61,12 @@ void MainWindow::setupLogWidget() {
     palette.setColor(QPalette::Base, Qt::transparent);
     logWidget_->setPalette(palette);
     logWidget_->viewport()->setAutoFillBackground(false);
-    logWidget_->setStyleSheet(QStringLiteral(
-        "QPlainTextEdit { background: transparent; color: #657e88; border: none; selection-background-color: #d5e7e9; }"
-        "QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }"
-        "QScrollBar::handle:vertical { background: rgba(130, 157, 166, 100); border-radius: 2px; min-height: 20px; }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"));
+    logWidget_->setStyleSheet(
+        QStringLiteral("QPlainTextEdit { background: transparent; color: #657e88; border: none; selection-background-color: #d5e7e9; }"
+                       "QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }"
+                       "QScrollBar::handle:vertical { background: rgba(130, 157, 166, 100); border-radius: 2px; min-height: 20px; }"
+                       "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+                       "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"));
 }
 
 void MainWindow::setupCentral() {
@@ -75,9 +77,7 @@ void MainWindow::setupCentral() {
 
     connect(viewport_, &MeshViewport::elementPicked, this, &MainWindow::showElementInfo);
     connect(viewport_, &MeshViewport::nodePicked, this, &MainWindow::showNodeInfo);
-    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() {
-        logWidget_->appendPlainText(tr("已取消选择"));
-    });
+    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() { logWidget_->appendPlainText(tr("已取消选择")); });
 }
 
 void MainWindow::setupResultPopup() {
@@ -230,9 +230,8 @@ void MainWindow::layoutOverlays() {
 
 void MainWindow::showElementInfo(MeshId elementId) {
     const auto &elements = currentModel_.mesh.elements;
-    const auto it = std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) {
-        return element.id == elementId;
-    });
+    const auto it =
+        std::find_if(elements.begin(), elements.end(), [elementId](const MeshElement &element) { return element.id == elementId; });
     if (it == elements.end())
         return;
     QStringList nodeIds;
@@ -248,7 +247,10 @@ void MainWindow::showNodeInfo(MeshId nodeId) {
         return;
     const auto &xyz = it->coordinates;
     logWidget_->appendPlainText(tr("节点 %1 · X %2 · Y %3 · Z %4")
-        .arg(static_cast<qlonglong>(nodeId)).arg(xyz[0], 0, 'g', 10).arg(xyz[1], 0, 'g', 10).arg(xyz[2], 0, 'g', 10));
+                                    .arg(static_cast<qlonglong>(nodeId))
+                                    .arg(xyz[0], 0, 'g', 10)
+                                    .arg(xyz[1], 0, 'g', 10)
+                                    .arg(xyz[2], 0, 'g', 10));
 }
 
 bool MainWindow::switchWorkspace(Workspace workspace) {
@@ -276,8 +278,8 @@ void MainWindow::updateActionStates() {
     viewResultsAction_->setEnabled(hasModel && hasResultFile && !solving_);
     pickNodeAction_->setEnabled(hasModel);
     pickElementAction_->setEnabled(hasModel);
-    viewResultsAction_->setChecked(workspace_ == Workspace::Postprocess &&
-                                   componentCombo_->currentIndex() >= 0 && contourCheck_->isChecked());
+    viewResultsAction_->setChecked(workspace_ == Workspace::Postprocess && componentCombo_->currentIndex() >= 0 &&
+                                   contourCheck_->isChecked());
 }
 
 void MainWindow::showResultOptions() {
@@ -327,8 +329,7 @@ void MainWindow::onOpenFile() {
         return;
 
     while (true) {
-        const QString selected = QFileDialog::getExistingDirectory(
-            this, tr("选择包含唯一 INP 文件的工作目录"), workingDirectory_);
+        const QString selected = QFileDialog::getExistingDirectory(this, tr("选择包含唯一 INP 文件的工作目录"), workingDirectory_);
         if (selected.isEmpty())
             return;
 
@@ -341,8 +342,7 @@ void MainWindow::onOpenFile() {
         }
         if (inputFiles.size() != 1) {
             QMessageBox::warning(this, tr("工作目录无效"),
-                                 tr("工作目录中必须恰好包含一个 INP 文件。\n当前找到：%1 个。")
-                                     .arg(inputFiles.size()));
+                                 tr("工作目录中必须恰好包含一个 INP 文件。\n当前找到：%1 个。").arg(inputFiles.size()));
             continue;
         }
 
@@ -402,7 +402,6 @@ void MainWindow::onOpenFile() {
     }
 }
 
-
 bool MainWindow::loadSavedResults() {
     QString error;
     const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
@@ -411,8 +410,7 @@ bool MainWindow::loadSavedResults() {
         return false;
     }
     if (currentHash != inputFingerprint_) {
-        QMessageBox::warning(this, tr("模型已变化"),
-                             tr("INP 文件已被修改。\n请重新选择工作目录以加载新模型，然后重新求解。"));
+        QMessageBox::warning(this, tr("模型已变化"), tr("INP 文件已被修改。\n请重新选择工作目录以加载新模型，然后重新求解。"));
         return false;
     }
     const auto loaded = DisplacementResultIO::load(resultFilePath_, modelGrid_, inputFingerprint_);
@@ -425,7 +423,6 @@ bool MainWindow::loadSavedResults() {
     logWidget_->appendPlainText(tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
     return true;
 }
-
 
 void MainWindow::onSolve() {
     if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
@@ -462,21 +459,22 @@ void MainWindow::onSolve() {
         logWidget_->appendPlainText(tr("点击云图图标，读取结果并选择位移分量。"));
     });
 
-    watcher->setFuture(QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_,
-                                        inputHash = inputFingerprint_]() -> QString {
-        try {
-            const AnalysisModel analysis(model);
-            const auto stiffness = analysis.assembleElasticStiffness();
-            const auto solution = analysis.solveLinearStatic(stiffness);
-            const auto built = vtkBuilder{}.buildResults(model.mesh, analysis, solution);
-            if (!built.success())
-                return built.error;
-            QString saveError;
-            if (!DisplacementResultIO::save(outputPath, built.grid, inputHash, saveError))
-                return saveError;
-            return {};
-        } catch (const std::exception &error) {
-            return QString::fromUtf8(error.what());
-        }
-    }));
+    watcher->setFuture(
+        QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_]() -> QString {
+            try {
+                const AnalysisProblemBuilder builder(model);
+                const auto system = builder.buildLinearStaticSystem();
+                LinearStaticSolver solver;
+                const auto &solution = solver.solve(system);
+                const auto built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
+                if (!built.success())
+                    return built.error;
+                QString saveError;
+                if (!DisplacementResultIO::save(outputPath, built.grid, inputHash, saveError))
+                    return saveError;
+                return {};
+            } catch (const std::exception &error) {
+                return QString::fromUtf8(error.what());
+            }
+        }));
 }
