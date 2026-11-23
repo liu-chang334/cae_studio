@@ -1,15 +1,30 @@
 # 用测试自己的main构建独立的可执行文件
 add_executable(C3D8Smoke
     C3D8Smoke.cpp
-    ../src/C3D8Element.cpp
-    ../src/LinearElastic.cpp
+    ../solver/elements/src/C3D8Element.cpp
+    ../solver/materials/src/LinearElastic.cpp
 )
 add_executable(AnalysisModelSmoke
     AnalysisModelSmoke.cpp
-    ../src/AbaqusInpReader.cpp
-    ../src/AnalysisModel.cpp
-    ../src/C3D8Element.cpp
-    ../src/LinearElastic.cpp
+    ../io/src/AbaqusInpReader.cpp
+    ../solver/analysis/src/AnalysisModel.cpp
+    ../solver/elements/src/C3D8Element.cpp
+    ../solver/materials/src/LinearElastic.cpp
+)
+# 单元测试需要网格、材料和单元的头文件。
+target_include_directories(C3D8Smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../model/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/elements/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/materials/include"
+)
+
+# 模型测试还需要 INP 读取器和分析模型的头文件。
+target_include_directories(AnalysisModelSmoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../io/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../model/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/analysis/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/elements/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/materials/include"
 )
 
 # 链接公共矩阵库, 继承公开的include路径

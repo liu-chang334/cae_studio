@@ -40,10 +40,10 @@ message(STATUS "Qt6_DIR: ${Qt6_DIR}")
 message(STATUS "VTK_DIR: ${VTK_DIR}")
 
 # 将公共矩阵运算编译成静态库
-add_library(CAEMath STATIC src/Matrix.cpp)
+add_library(CAEMath STATIC solver/math/src/Matrix.cpp)
 
 # 让CAEMath及链接它的目标能找到公开头文件
-target_include_directories(CAEMath PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(CAEMath PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/solver/math/include")
 
 # 数学库关闭该目标的AUTOMOC
 set_target_properties(CAEMath PROPERTIES AUTOMOC OFF)
@@ -54,28 +54,38 @@ add_subdirectory(test)
 # 添加可执行文件(主程序)
 add_executable(CAEStudio 
   main.cpp
-  src/MainWindow.cpp
-  src/MinimalUi.cpp
+
+  ui/src/MainWindow.cpp
+  ui/src/MinimalUi.cpp
+  ui/src/MeshViewport.cpp
   resources/icons.qrc
-  src/vtkScene.cpp
-  src/MeshViewport.cpp
-  src/AbaqusInpReader.cpp
-  src/vtkBuilder.cpp
-  src/DisplacementResultIO.cpp
-  src/C3D8Element.cpp # C3D8单元几何计算实现
-  src/LinearElastic.cpp # 线性弹性材料实现
-  src/AnalysisModel.cpp # 计算模型实现
+  
+  visualization/src/vtkScene.cpp
+  visualization/src/vtkBuilder.cpp
+
+  io/src/AbaqusInpReader.cpp
+  io/src/DisplacementResultIO.cpp
+
+  solver/elements/src/C3D8Element.cpp # C3D8单元几何计算实现
+  solver/materials/src/LinearElastic.cpp # 线性弹性材料实现
+  solver/analysis/src/AnalysisModel.cpp # 计算模型实现
 )
 
 # 添加头文件搜索路径
 target_include_directories(CAEStudio PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ui/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/visualization/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/io/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/model/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/solver/elements/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/solver/materials/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/solver/analysis/include"
 )
 
 # 将含有 Q_OBJECT 的头文件加入目标，供 AUTOMOC 扫描
 target_sources(CAEStudio PRIVATE
-    include/MainWindow.h
-    include/MeshViewport.h
+    ui/include/MainWindow.h
+    ui/include/MeshViewport.h
 )
 
 # 链接 Qt + VTK
