@@ -30,7 +30,8 @@ public:
      */
     void setMesh(vtkUnstructuredGrid *grid, bool animateImport = true, bool resetView = true);
 
-    bool setContour(const char *arrayName, const char *title, bool showLegend = true);
+    bool setContour(const char *arrayName, const char *title, bool showLegend = true, const char *legendFooter = nullptr);
+    void setLegendBottomInset(double inset);
 
     void clearContour();
 

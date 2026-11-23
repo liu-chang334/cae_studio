@@ -13,6 +13,7 @@
 #include <vtkCellData.h>
 #include <vtkCellPicker.h>
 #include <vtkCellType.h>
+#include <vtkCoordinate.h>
 #include <vtkDataSetMapper.h>
 #include <vtkDiscretizableColorTransferFunction.h>
 #include <vtkDoubleArray.h>
@@ -29,6 +30,7 @@
 #include <vtkRenderer.h>
 #include <vtkScalarBarActor.h>
 #include <vtkShaderProperty.h>
+#include <vtkTextActor.h>
 #include <vtkTextProperty.h>
 #include <vtkTubeFilter.h>
 #include <vtkTypeInt64Array.h>
@@ -67,7 +69,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool resetView) {
         renderer_->ResetCameraClippingRange();
 }
 
-bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend) {
+bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter) {
     if (!grid_ || !meshActor_ || !arrayName)
         return false;
     auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
@@ -125,9 +127,6 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
     if (!scalarBar_) {
         scalarBar_ = vtkSmartPointer<vtkScalarBarActor>::New();
         scalarBar_->SetOrientationToVertical();
-        scalarBar_->SetPosition(0.87, 0.20);
-        scalarBar_->SetWidth(0.10);
-        scalarBar_->SetHeight(0.55);
         scalarBar_->SetBarRatio(0.25);
         scalarBar_->SetMaximumNumberOfColors(colorLevels);
         scalarBar_->SetNumberOfLabels(12);
@@ -151,18 +150,62 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
         labelText->SetColor(0.0, 0.0, 0.0);
         labelText->ShadowOff();
         renderer_->AddActor2D(scalarBar_);
+
+        legendFooter_ = vtkSmartPointer<vtkTextActor>::New();
+        legendFooter_->SetTextScaleModeToNone();
+        legendFooter_->GetPositionCoordinate()->SetCoordinateSystemToNormalizedViewport();
+        auto *footerText = legendFooter_->GetTextProperty();
+        footerText->ShallowCopy(labelText);
+        footerText->SetJustificationToCentered();
+        footerText->SetVerticalJustificationToTop();
+        renderer_->AddActor2D(legendFooter_);
     }
     // 5. 每次切换结果都更新标题、颜色映射与可见性
     scalarBar_->SetTitle(title ? title : arrayName);
     scalarBar_->SetLookupTable(mapper->GetLookupTable());
     scalarBar_->SetVisibility(showLegend);
+    legendFooter_->SetInput(legendFooter ? legendFooter : "");
+    legendFooter_->SetVisibility(showLegend && legendFooter && *legendFooter);
+    updateLegendPosition();
 
     return true;
+}
+
+void vtkScene::setLegendBottomInset(double inset) {
+    legendBottomInset_ = inset;
+    if (scalarBar_)
+        updateLegendPosition();
+}
+
+void vtkScene::updateLegendPosition() {
+    constexpr double defaultLeft = 0.87;
+    constexpr double width = 0.10;
+    constexpr double rightPadding = 0.03;
+    constexpr double top = 0.75;
+    constexpr double defaultBottom = 0.20;
+    constexpr double footerSpace = 0.07;
+    constexpr double footerGap = 0.012;
+    const bool showFooter = legendFooter_->GetVisibility();
+    const double bottom = showFooter ? std::max(defaultBottom, legendBottomInset_ + footerSpace) : defaultBottom;
+    double center = defaultLeft + width * 0.5;
+    const int viewportWidth = renderer_->GetSize()[0];
+    if (showFooter && viewportWidth > 0) {
+        double textSize[2];
+        legendFooter_->GetSize(renderer_, textSize);
+        const double halfTextWidth = textSize[0] / (2.0 * viewportWidth);
+        center = std::min(center, std::max(width * 0.5, 1.0 - rightPadding - halfTextWidth));
+    }
+    scalarBar_->SetPosition(center - width * 0.5, bottom);
+    scalarBar_->SetWidth(width);
+    scalarBar_->SetHeight(top - bottom);
+    legendFooter_->SetPosition(center, bottom - footerGap);
 }
 
 void vtkScene::clearContour() {
     if (scalarBar_)
         scalarBar_->SetVisibility(false);
+    if (legendFooter_)
+        legendFooter_->SetVisibility(false);
     if (!meshActor_)
         return;
     auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
@@ -185,6 +228,10 @@ void vtkScene::clear() {
     if (scalarBar_) {
         renderer_->RemoveActor2D(scalarBar_);
         scalarBar_ = nullptr;
+    }
+    if (legendFooter_) {
+        renderer_->RemoveActor2D(legendFooter_);
+        legendFooter_ = nullptr;
     }
     // 3. 重置持有的所有指针
     meshActor_ = nullptr;

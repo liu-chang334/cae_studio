@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 struct FEModel;
+enum class AnalysisType;
 
 /**
  * @brief 计算模型类
@@ -118,4 +119,5 @@ private:
      * @details 每个元素为可选的位移值, 有值表示该方向上的位移被固定为该值, 否则表示该方向自由
      */
     std::vector<std::optional<double>> prescribedDisplacements_;
+    AnalysisType analysisType_;
 };

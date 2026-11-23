@@ -12,6 +12,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QEvent>
 #include <QFileDialog>
@@ -23,7 +24,6 @@
 #include <QGraphicsDropShadowEffect>
 #include <QGuiApplication>
 #include <QHBoxLayout>
-#include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPalette>
@@ -31,6 +31,7 @@
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QStringList>
+#include <QTime>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
@@ -39,6 +40,14 @@
 #include <exception>
 #include <filesystem>
 #include <utility>
+
+namespace {
+
+const char *analysisKeyword(AnalysisType type) {
+    return type == AnalysisType::ExplicitDynamics ? "*Dynamic, Explicit" : "*Static";
+}
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     setFont(QFont(QStringLiteral("Microsoft YaHei UI"), 9));
@@ -49,7 +58,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     updateActionStates();
     setMinimumSize(680, 500);
     resize(1180, 800);
-    logWidget_->appendPlainText(tr("Ctrl+O 选择工作目录 · Ctrl+0 适应视图 · F5 求解 · Ctrl+R 云图"));
+    appendLog(tr("Ctrl+O 选择工作目录 · Ctrl+0 适应视图 · F5 求解 · Ctrl+R 云图"));
 }
 
 void MainWindow::setupLogWidget() {
@@ -70,6 +79,13 @@ void MainWindow::setupLogWidget() {
                        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"));
 }
 
+void MainWindow::appendLog(const QString &message) {
+    const QString prefix = QStringLiteral("[%1] ").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")));
+    QString entry = message;
+    entry.replace(QLatin1Char('\n'), QStringLiteral("\n") + prefix);
+    logWidget_->appendPlainText(prefix + entry);
+}
+
 void MainWindow::setupCentral() {
     viewport_ = new MeshViewport(this);
     setCentralWidget(viewport_);
@@ -78,7 +94,7 @@ void MainWindow::setupCentral() {
 
     connect(viewport_, &MeshViewport::elementPicked, this, &MainWindow::showElementInfo);
     connect(viewport_, &MeshViewport::nodePicked, this, &MainWindow::showNodeInfo);
-    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() { logWidget_->appendPlainText(tr("已取消选择")); });
+    connect(viewport_, &MeshViewport::selectionCleared, this, [this]() { appendLog(tr("已取消选择")); });
 }
 
 void MainWindow::setupResultPopup() {
@@ -209,8 +225,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 
 void MainWindow::layoutOverlays() {
     if (logPanel_) {
-        const int height = std::min(156, viewport_->height() / 3);
-        logPanel_->setGeometry(0, viewport_->height() - height, viewport_->width(), height);
+        const int viewportHeight = viewport_->height();
+        const int height = std::min(156, viewportHeight / 3);
+        logPanel_->setGeometry(0, viewportHeight - height, viewport_->width(), height);
+        if (viewportHeight > 0)
+            viewport_->setLegendBottomInset(static_cast<double>(height) / viewportHeight);
         logPanel_->raise();
     }
     // 等视口获得实际尺寸后再定位，避免构造期间把两个工具条挤在同一处。
@@ -238,7 +257,7 @@ void MainWindow::showElementInfo(MeshId elementId) {
     QStringList nodeIds;
     for (MeshId id : it->nodeIds)
         nodeIds.append(QString::number(static_cast<qlonglong>(id)));
-    logWidget_->appendPlainText(tr("单元 %1 · 节点 [%2]").arg(static_cast<qlonglong>(elementId)).arg(nodeIds.join(", ")));
+    appendLog(tr("单元 %1 · 节点 [%2]").arg(static_cast<qlonglong>(elementId)).arg(nodeIds.join(", ")));
 }
 
 void MainWindow::showNodeInfo(MeshId nodeId) {
@@ -247,11 +266,11 @@ void MainWindow::showNodeInfo(MeshId nodeId) {
     if (it == nodes.end())
         return;
     const auto &xyz = it->coordinates;
-    logWidget_->appendPlainText(tr("节点 %1 · X %2 · Y %3 · Z %4")
-                                    .arg(static_cast<qlonglong>(nodeId))
-                                    .arg(xyz[0], 0, 'g', 10)
-                                    .arg(xyz[1], 0, 'g', 10)
-                                    .arg(xyz[2], 0, 'g', 10));
+    appendLog(tr("节点 %1 · X %2 · Y %3 · Z %4")
+                  .arg(static_cast<qlonglong>(nodeId))
+                  .arg(xyz[0], 0, 'g', 10)
+                  .arg(xyz[1], 0, 'g', 10)
+                  .arg(xyz[2], 0, 'g', 10));
 }
 
 bool MainWindow::switchWorkspace(Workspace workspace) {
@@ -318,10 +337,11 @@ void MainWindow::updateResultDisplay() {
     }
     static const char *arrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
     static const char *titles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
-    if (!viewport_->setContour(arrays[component], titles[component], legendCheck_->isChecked())) {
+    if (!viewport_->setContour(arrays[component], titles[component], legendCheck_->isChecked(),
+                               analysisKeyword(currentModel_.analysisType))) {
         viewport_->clearContour();
         viewResultsAction_->setChecked(false);
-        logWidget_->appendPlainText(tr("无法显示位移数组：%1").arg(QString::fromLatin1(arrays[component])));
+        appendLog(tr("无法显示位移数组：%1").arg(QString::fromLatin1(arrays[component])));
     }
 }
 
@@ -359,7 +379,7 @@ void MainWindow::onOpenFile() {
         AbaqusInpReader reader;
         auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()));
         for (const auto &warning : readResult.warnings)
-            logWidget_->appendPlainText(QString::fromStdString(warning));
+            appendLog(QString::fromStdString(warning));
         if (!readResult.success()) {
             QMessageBox::warning(this, tr("模型读取失败"), QString::fromStdString(readResult.error));
             continue;
@@ -394,11 +414,11 @@ void MainWindow::onOpenFile() {
         const bool hasResultFile = QFileInfo(resultFilePath_).isFile();
         switchWorkspace(Workspace::Preprocess);
         viewport_->setMesh(modelGrid_, true, true);
-        setWindowTitle(tr("CAEStudio — %1").arg(workingDirectory_));
-        logWidget_->appendPlainText(tr("工作目录：%1").arg(workingDirectory_));
-        logWidget_->appendPlainText(tr("已加载模型：%1").arg(inputFilePath_));
+        setWindowTitle(tr("CAEStudio — %1 — %2").arg(QString::fromLatin1(analysisKeyword(currentModel_.analysisType)), workingDirectory_));
+        appendLog(tr("工作目录：%1").arg(workingDirectory_));
+        appendLog(tr("已加载模型：%1").arg(inputFilePath_));
         if (hasResultFile)
-            logWidget_->appendPlainText(tr("发现结果文件：%1\n进入后处理时将检查并读取。").arg(resultFilePath_));
+            appendLog(tr("发现结果文件：%1\n进入后处理时将检查并读取。").arg(resultFilePath_));
         return;
     }
 }
@@ -421,23 +441,40 @@ bool MainWindow::loadSavedResults() {
     }
     resultGrid_ = loaded.grid;
     viewport_->setMesh(resultGrid_, false, false);
-    logWidget_->appendPlainText(tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
+    appendLog(tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
     return true;
 }
 
 void MainWindow::onSolve() {
     if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
         return;
-
-    const auto reductionLabel = tr("约化法");
-    const auto penaltyLabel = tr("乘大数法");
-    bool accepted = false;
-    const auto selectedMethod = QInputDialog::getItem(this, tr("线性静力求解"), tr("位移约束处理方法"),
-                                                      {reductionLabel, penaltyLabel}, 0, false, &accepted);
-    if (!accepted)
+    if (currentModel_.analysisType == AnalysisType::ExplicitDynamics) {
+        QMessageBox::information(this, tr("显式动力学"), tr("已识别显式动力学分析步。当前版本暂未接入显式求解器。"));
         return;
-    const auto constraintMethod = selectedMethod == penaltyLabel ? LinearStaticConstraintMethod::Penalty
-                                                                : LinearStaticConstraintMethod::Reduction;
+    }
+
+    QDialog methodDialog(this);
+    methodDialog.setWindowTitle(tr("线性静力求解"));
+    methodDialog.setMinimumWidth(300);
+
+    auto *methods = new QComboBox(&methodDialog);
+    methods->addItem(tr("约化法"), static_cast<int>(LinearStaticConstraintMethod::Reduction));
+    methods->addItem(tr("乘大数法"), static_cast<int>(LinearStaticConstraintMethod::Penalty));
+    auto *form = new QFormLayout();
+    form->addRow(tr("位移约束处理方法"), methods);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &methodDialog);
+    connect(buttons, &QDialogButtonBox::accepted, &methodDialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &methodDialog, &QDialog::reject);
+
+    auto *layout = new QVBoxLayout(&methodDialog);
+    layout->addLayout(form);
+    layout->addWidget(buttons);
+    methodDialog.adjustSize();
+    if (methodDialog.exec() != QDialog::Accepted)
+        return;
+    const auto selectedMethod = methods->currentText();
+    const auto constraintMethod = static_cast<LinearStaticConstraintMethod>(methods->currentData().toInt());
 
     QString error;
     const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
@@ -453,7 +490,7 @@ void MainWindow::onSolve() {
     solving_ = true;
     switchWorkspace(Workspace::Solve);
     updateActionStates();
-    logWidget_->appendPlainText(tr("正在求解（%1）…").arg(selectedMethod));
+    appendLog(tr("正在求解（%1）…").arg(selectedMethod));
 
     // 空字符串表示成功，后台临时结果网格不直接交给显示层。
     auto *watcher = new QFutureWatcher<QString>(this);
@@ -462,13 +499,13 @@ void MainWindow::onSolve() {
         watcher->deleteLater();
         solving_ = false;
         if (!jobError.isEmpty()) {
-            logWidget_->appendPlainText(jobError);
+            appendLog(jobError);
             updateActionStates();
             return;
         }
         updateActionStates();
-        logWidget_->appendPlainText(tr("位移结果已保存：%1").arg(resultFilePath_));
-        logWidget_->appendPlainText(tr("点击云图图标，读取结果并选择位移分量。"));
+        appendLog(tr("位移结果已保存：%1").arg(resultFilePath_));
+        appendLog(tr("点击云图图标，读取结果并选择位移分量。"));
     });
 
     watcher->setFuture(

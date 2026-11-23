@@ -4,13 +4,20 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-enum Section { None, Node, Element, NodeSet, Load, Boundary, Elastic };
+enum Section { None, Node, Element, NodeSet, Load, ConcentratedLoad, Boundary, Elastic };
+enum class StepState { ModelData, NeedsProcedure, InStep, Ended };
 
 struct SectionAssignment {
     std::string setName;
     std::string materialName;
+    std::size_t lineNumber;
+};
+
+struct BoundaryRow {
+    std::vector<std::string> fields;
     std::size_t lineNumber;
 };
 
@@ -57,6 +64,14 @@ std::string keywordValue(const std::vector<std::string> &fields, const std::stri
     return {};
 }
 
+bool hasKeywordFlag(const std::vector<std::string> &fields, const std::string &flag) {
+    for (std::size_t i = 1; i < fields.size(); ++i) {
+        if (toUpperAscii(fields[i]) == flag)
+            return true;
+    }
+    return false;
+}
+
 bool parseId(const std::string &field, MeshId &value) {
     std::istringstream stream(field);
     stream.imbue(std::locale::classic());
@@ -67,6 +82,46 @@ bool parseDouble(const std::string &field, double &value) {
     std::istringstream stream(field);
     stream.imbue(std::locale::classic());
     return (stream >> value) && stream.eof() && std::isfinite(value);
+}
+
+bool parseDof(const std::string &field, int &dof) {
+    MeshId value{};
+    if (!parseId(field, value) || value < 1 || value > 3)
+        return false;
+    dof = static_cast<int>(value);
+    return true;
+}
+
+NodeTarget parseNodeTarget(const std::string &field) {
+    MeshId nodeId{};
+    if (parseId(field, nodeId))
+        return nodeId;
+    return field;
+}
+
+bool appendBoundary(const std::vector<std::string> &fields, bool legacyFormat, FEModel &model) {
+    int firstDof{};
+    if (fields.size() < 2 || fields.size() > 4 || fields[0].empty() || !parseDof(fields[1], firstDof))
+        return false;
+
+    double displacement = 0.0;
+    if (legacyFormat && (fields.size() == 3 || (fields.size() == 4 && fields[3].empty()))) {
+        if (!parseDouble(fields[2], displacement))
+            return false;
+        model.boundaries.push_back({fields[0], firstDof, displacement});
+        return true;
+    }
+
+    int lastDof = firstDof;
+    if (fields.size() >= 3 && !fields[2].empty() && (!parseDof(fields[2], lastDof) || lastDof < firstDof))
+        return false;
+    if (fields.size() == 4 && !fields[3].empty() && !parseDouble(fields[3], displacement))
+        return false;
+
+    const auto target = parseNodeTarget(fields[0]);
+    for (int dof = firstDof; dof <= lastDof; ++dof)
+        model.boundaries.push_back({target, dof, displacement});
+    return true;
 }
 
 std::string lineMessage(std::size_t lineNumber, const std::string &message) {
@@ -86,6 +141,13 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     std::string currentNodeSetName;
     std::string currentElementSet;
     std::vector<SectionAssignment> sectionAssignments;
+    std::vector<BoundaryRow> boundaryRows;
+    std::unordered_map<std::string, std::string> nodeSetNames;
+    StepState stepState = StepState::ModelData;
+    std::size_t stepLine = 0;
+    bool nonlinearStep = false;
+    bool perturbationStep = false;
+    bool hasConcentratedLoad = false;
     std::string line;
     std::size_t lineNumber = 0;
     while (std::getline(input, line)) {
@@ -101,7 +163,39 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
             section = Section::None;
             currentNodeSetName.clear();
             currentElementSet.clear();
-            if (keyword == "*NODE") {
+            if (stepState == StepState::NeedsProcedure) {
+                if (keyword == "*STATIC") {
+                    if (nonlinearStep || perturbationStep || fields.size() != 1) {
+                        result.error = lineMessage(lineNumber, "当前仅支持小变形静力分析，暂不支持该 *STEP 或 *STATIC 选项");
+                        return result;
+                    }
+                    model.analysisType = AnalysisType::Static;
+                } else if (keyword == "*DYNAMIC" && hasKeywordFlag(fields, "EXPLICIT")) {
+                    model.analysisType = AnalysisType::ExplicitDynamics;
+                } else {
+                    result.error = lineMessage(lineNumber, "*STEP 后需要 *STATIC 或 *DYNAMIC, EXPLICIT，当前为 " + keyword);
+                    return result;
+                }
+                stepState = StepState::InStep;
+            } else if (keyword == "*STEP") {
+                if (stepState != StepState::ModelData) {
+                    result.error = lineMessage(lineNumber, "当前仅支持一个分析步");
+                    return result;
+                }
+                stepLine = lineNumber;
+                stepState = StepState::NeedsProcedure;
+                nonlinearStep = hasKeywordFlag(fields, "NLGEOM") || toUpperAscii(keywordValue(fields, "NLGEOM")) == "YES";
+                perturbationStep = hasKeywordFlag(fields, "PERTURBATION");
+            } else if (keyword == "*END STEP") {
+                if (stepState != StepState::InStep) {
+                    result.error = lineMessage(lineNumber, "*END STEP 缺少对应的 *STEP");
+                    return result;
+                }
+                stepState = StepState::Ended;
+            } else if (keyword == "*STATIC" || keyword == "*DYNAMIC") {
+                result.error = lineMessage(lineNumber, "分析过程卡片必须紧跟 *STEP，每个分析步只能定义一次分析过程");
+                return result;
+            } else if (keyword == "*NODE") {
                 section = Section::Node;
             } else if (keyword == "*ELEMENT") {
                 const std::string type = toUpperAscii(keywordValue(fields, "TYPE"));
@@ -131,11 +225,19 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                     result.error = lineMessage(lineNumber, "*NSET 缺少 NSET 名称");
                     return result;
                 }
+                currentNodeSetName = nodeSetNames.try_emplace(toUpperAscii(currentNodeSetName), currentNodeSetName).first->second;
                 model.nodeSets.try_emplace(currentNodeSetName);
                 section = Section::NodeSet;
-            } else if (keyword == "*LOAD")
+            } else if (keyword == "*LOAD") {
                 section = Section::Load;
-            else if (keyword == "*BOUNDARY") {
+            } else if (keyword == "*CLOAD") {
+                if (fields.size() != 1) {
+                    result.error = lineMessage(lineNumber, "暂不支持 *CLOAD 的关键字参数");
+                    return result;
+                }
+                hasConcentratedLoad = true;
+                section = Section::ConcentratedLoad;
+            } else if (keyword == "*BOUNDARY") {
                 if (fields.size() != 1) {
                     result.error = lineMessage(lineNumber, "暂不支持 *BOUNDARY 的关键字参数");
                     return result;
@@ -211,21 +313,19 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 }
                 nodeIds.push_back(nodeId);
             }
-        } else if (section == Section::Load || section == Section::Boundary) {
+        } else if (section == Section::Load || section == Section::ConcentratedLoad) {
             if (parts.back().empty())
                 parts.pop_back();
-            MeshId dof{};
+            int dof{};
             double value{};
-            if (parts.size() != 3 || parts[0].empty() || !parseId(parts[1], dof) || dof < 1 || dof > 3 ||
-                !parseDouble(parts[2], value)) {
-                result.error = lineMessage(lineNumber, "荷载或约束应为 节点集名称, 自由度(1–3), 有限数值");
+            if (parts.size() != 3 || parts[0].empty() || !parseDof(parts[1], dof) || !parseDouble(parts[2], value)) {
+                result.error = lineMessage(lineNumber, "集中载荷应为 节点编号或节点集名称, 自由度(1–3), 有限数值");
                 return result;
             }
-            if (section == Section::Load)
-                model.loads.push_back({parts[0], static_cast<int>(dof), value});
-            else
-                model.boundaries.push_back({parts[0], static_cast<int>(dof), value});
-
+            auto target = section == Section::Load ? NodeTarget{parts[0]} : parseNodeTarget(parts[0]);
+            model.loads.push_back({std::move(target), dof, value});
+        } else if (section == Section::Boundary) {
+            boundaryRows.push_back({std::move(parts), lineNumber});
         } else if (section == Section::Elastic) {
             IsotropicElasticData elastic;
             if (parts.size() < 2 || !parseDouble(parts[0], elastic.youngModulus) || !parseDouble(parts[1], elastic.poissonRatio)) {
@@ -239,23 +339,50 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
         result.error = "读取文件失败：" + path.u8string();
         return result;
     }
+    if (stepState == StepState::NeedsProcedure || stepState == StepState::InStep) {
+        result.error = lineMessage(stepLine, stepState == StepState::NeedsProcedure ? "*STEP 缺少分析过程卡片" : "*STEP 缺少 *END STEP");
+        return result;
+    }
     if (model.mesh.nodes.empty() || model.mesh.elements.empty()) {
         result.error = "未读取到有效网格";
         return result;
     }
-    for (const NodeSetLoad &load : model.loads) {
-        const auto set = model.nodeSets.find(load.nodeSetName);
-        if (set == model.nodeSets.end() || set->second.empty()) {
-            result.error = "荷载引用的节点集不存在或为空：" + load.nodeSetName;
+    const bool legacyBoundaryFormat = stepLine == 0 && !hasConcentratedLoad;
+    for (const auto &row : boundaryRows) {
+        if (!appendBoundary(row.fields, legacyBoundaryFormat, model)) {
+            result.error = lineMessage(row.lineNumber, "*BOUNDARY 需要 节点编号或节点集名称, 起始自由度, 结束自由度, 位移值（自由度范围为 1–3）");
             return result;
         }
     }
-    for (const NodeSetBoundary &boundary : model.boundaries) {
-        const auto set = model.nodeSets.find(boundary.nodeSetName);
-        if (set == model.nodeSets.end() || set->second.empty()) {
-            result.error = "边界条件引用的节点集不存在或为空：" + boundary.nodeSetName;
-            return result;
+
+    std::unordered_set<MeshId> nodeIds;
+    nodeIds.reserve(model.mesh.nodes.size());
+    for (const auto &node : model.mesh.nodes)
+        nodeIds.insert(node.id);
+
+    const auto validateTarget = [&](NodeTarget &target, const std::string &conditionName) {
+        if (const auto *nodeId = std::get_if<MeshId>(&target)) {
+            if (*nodeId > 0 && nodeIds.find(*nodeId) != nodeIds.end())
+                return true;
+            result.error = conditionName + "引用的节点不存在：" + std::to_string(*nodeId);
+            return false;
         }
+        auto &name = std::get<std::string>(target);
+        const auto setName = nodeSetNames.find(toUpperAscii(name));
+        if (setName == nodeSetNames.end() || model.nodeSets.at(setName->second).empty()) {
+            result.error = conditionName + "引用的节点集不存在或为空：" + name;
+            return false;
+        }
+        name = setName->second;
+        return true;
+    };
+    for (auto &load : model.loads) {
+        if (!validateTarget(load.target, "载荷"))
+            return result;
+    }
+    for (auto &boundary : model.boundaries) {
+        if (!validateTarget(boundary.target, "边界条件"))
+            return result;
     }
     std::unordered_map<std::string, std::string> materialNames;
     for (const MaterialData &material : model.materials) {

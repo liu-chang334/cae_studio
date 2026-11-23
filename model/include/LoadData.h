@@ -1,13 +1,12 @@
 #pragma once
 
-#include <string>
+#include "NodeTarget.h"
 
 /**
- * @brief 节点集载荷结构体
- * @details 用于存储节点集载荷的信息，包括节点集名称、自由度和载荷大小
+ * @brief 作用于节点或节点集的集中载荷
  */
-struct NodeSetLoad {
-    std::string nodeSetName;
+struct NodalLoad {
+    NodeTarget target;
     int degreeOfFreedom = 0;
     double magnitude = 0.0;
 };

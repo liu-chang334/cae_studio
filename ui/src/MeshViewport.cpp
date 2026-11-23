@@ -88,12 +88,12 @@ void MeshViewport::setMesh(vtkUnstructuredGrid *grid, bool animateImport, bool r
     }
 }
 
-bool MeshViewport::setContour(const char *arrayName, const char *title, bool showLegend) {
+bool MeshViewport::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter) {
     importAnimation_->stop();
     // 完整显示网格后，恢复被清零的波浪强度。
     scene_->setMeshRevealProgress(1.0);
 
-    const bool success = scene_->setContour(arrayName, title, showLegend);
+    const bool success = scene_->setContour(arrayName, title, showLegend, legendFooter);
 
     // 切换结果时保留正在运行的动画相位。
     if (success && edgeAnimation_->state() != QAbstractAnimation::Running)
@@ -106,6 +106,8 @@ bool MeshViewport::setContour(const char *arrayName, const char *title, bool sho
 
     return success;
 }
+
+void MeshViewport::setLegendBottomInset(double inset) { scene_->setLegendBottomInset(inset); }
 
 void MeshViewport::clearContour() {
     const bool wasImporting = importAnimation_->state() == QAbstractAnimation::Running;

@@ -89,6 +89,8 @@ int main(int argc, char *argv[]) {
         const auto result = AbaqusInpReader{}.read(argv[1]);
         if (!result.success())
             throw std::runtime_error(result.error);
+        if (result.model.analysisType != AnalysisType::Static || result.model.loads.size() != 1 || result.model.boundaries.size() != 3)
+            throw std::runtime_error("Unexpected analysis type, concentrated loads or expanded boundaries");
 
         const AnalysisProblemBuilder analysis(result.model);
         if (analysis.elementCount() != 625)
@@ -114,6 +116,12 @@ int main(int argc, char *argv[]) {
         const auto &K = system.originalCoefficientMatrix;
         if (K.rows() != 2808 || K.cols() != 2808)
             throw std::runtime_error("Unexpected global stiffness dimensions");
+        for (const auto nodeId : result.model.nodeSets.at("nSet-2")) {
+            for (int dof = 1; dof <= 3; ++dof) {
+                if (system.prescribedValues[analysis.globalDofIndex(nodeId, dof)] != 0.0)
+                    throw std::runtime_error("Support displacement was not set to zero");
+            }
+        }
 
         const auto &e1 = dynamic_cast<const C3D8Element &>(analysis.element(1));
         const auto &e2 = dynamic_cast<const C3D8Element &>(analysis.element(2));

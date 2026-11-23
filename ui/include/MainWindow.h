@@ -37,6 +37,7 @@ private:
     enum class Workspace { Preprocess, Solve, Postprocess };
 
     void setupLogWidget();
+    void appendLog(const QString &message);
     void setupCentral();
     void setupResultPopup();
     void setupToolPalettes();

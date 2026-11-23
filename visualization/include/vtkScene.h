@@ -9,6 +9,7 @@ class vtkActor;
 class vtkRenderer;
 class vtkUnstructuredGrid;
 class vtkScalarBarActor;
+class vtkTextActor;
 
 /**
  * @brief vtk场景类
@@ -27,7 +28,8 @@ public:
 
     void setMesh(vtkUnstructuredGrid *grid, bool resetView = true);
 
-    bool setContour(const char *arrayName, const char *title, bool showLegend = true);
+    bool setContour(const char *arrayName, const char *title, bool showLegend = true, const char *legendFooter = nullptr);
+    void setLegendBottomInset(double inset);
 
     void clearContour();
 
@@ -94,6 +96,7 @@ private:
      * @param showImmediately 是否在构建后立即显示边线和波纹
      */
     void buildMeshEdges(bool showImmediately);
+    void updateLegendPosition();
 
 private:
     /// @brief 渲染器
@@ -107,6 +110,8 @@ private:
 
     /// @brief 标量对象
     vtkSmartPointer<vtkScalarBarActor> scalarBar_;
+    vtkSmartPointer<vtkTextActor> legendFooter_;
+    double legendBottomInset_ = 0.0;
 
     /// @brief 高亮对象
     /// @details 用于高亮单元或节点, 选中后显示高亮框

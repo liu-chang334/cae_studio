@@ -3,16 +3,25 @@
 #include "FEModel.h"
 #include "LinearElastic.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace {
-const std::vector<MeshId> &nodeIdsInSet(const FEModel &model, const std::string &setName) {
+template <typename Apply>
+void forEachTargetNode(const FEModel &model, const NodeTarget &target, Apply apply) {
+    if (const auto *nodeId = std::get_if<MeshId>(&target)) {
+        apply(*nodeId);
+        return;
+    }
+
+    const auto &setName = std::get<std::string>(target);
     const auto set = model.nodeSets.find(setName);
     if (set == model.nodeSets.end() || set->second.empty())
         throw std::invalid_argument("Unknown or empty node set: " + setName);
-    return set->second;
+    for (MeshId nodeId : set->second)
+        apply(nodeId);
 }
 }  // namespace
 
@@ -66,7 +75,7 @@ std::shared_ptr<const Material3D> resolveMaterial(MeshId elementId, const FEMode
     return material;
 }
 
-AnalysisProblemBuilder::AnalysisProblemBuilder(const FEModel &model) {
+AnalysisProblemBuilder::AnalysisProblemBuilder(const FEModel &model) : analysisType_(model.analysisType) {
     // 01. 构建节点源id->连续0-based节点索引映射表
     nodeIndexById_.reserve(model.mesh.nodes.size());
     for (std::size_t i = 0; i < model.mesh.nodes.size(); ++i) {
@@ -126,27 +135,27 @@ void AnalysisProblemBuilder::initializeNodalConditions(const FEModel &model) {
     prescribedDisplacements_.assign(globalDofCount(), std::nullopt);
     for (const auto &load : model.loads) {
         if (!std::isfinite(load.magnitude))
-            throw std::invalid_argument("non-finite load on node set: " + load.nodeSetName);
+            throw std::invalid_argument("Nodal load must be finite");
         std::unordered_set<MeshId> loadedNodes;
-        for (MeshId nodeId : nodeIdsInSet(model, load.nodeSetName)) {
+        forEachTargetNode(model, load.target, [&](MeshId nodeId) {
             if (!loadedNodes.insert(nodeId).second)
-                continue;
+                return;
             const auto dof = globalDofIndex(nodeId, load.degreeOfFreedom);
             auto &force = forceVector_[dof];
             force += load.magnitude;
-        }
+        });
     }
     for (const auto &boundary : model.boundaries) {
         if (!std::isfinite(boundary.displacement))
-            throw std::invalid_argument("non-finite boundary displacement on node set: " + boundary.nodeSetName);
-        for (MeshId nodeId : nodeIdsInSet(model, boundary.nodeSetName)) {
+            throw std::invalid_argument("Prescribed displacement must be finite");
+        forEachTargetNode(model, boundary.target, [&](MeshId nodeId) {
             const auto dof = globalDofIndex(nodeId, boundary.degreeOfFreedom);
             auto &prescribed = prescribedDisplacements_[dof];
             if (prescribed.has_value() && *prescribed != boundary.displacement)
                 throw std::invalid_argument("Conflicting prescribed displacement at node " + std::to_string(nodeId) + ", direction " +
                                             std::to_string(boundary.degreeOfFreedom));
             prescribed = boundary.displacement;
-        }
+        });
     }
 }
 
@@ -173,5 +182,7 @@ linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness() const {
 }
 
 ConstrainedLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
+    if (analysisType_ != AnalysisType::Static)
+        throw std::invalid_argument("Linear static assembly requires a static analysis step");
     return {assembleElasticStiffness(), forceVector_, prescribedDisplacements_};
 }
