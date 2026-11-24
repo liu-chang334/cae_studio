@@ -54,3 +54,22 @@ target_include_directories(ExplicitDynamicsSmoke PRIVATE
 )
 target_link_libraries(ExplicitDynamicsSmoke PRIVATE CAEMath)
 set_target_properties(ExplicitDynamicsSmoke PROPERTIES AUTOMOC OFF)
+
+add_executable(DisplacementResultSmoke
+    DisplacementResultSmoke.cpp
+    ../io/src/DisplacementResultIO.cpp
+    ../visualization/src/vtkBuilder.cpp
+    ../solver/analysis/src/AnalysisProblemBuilder.cpp
+    ../solver/elements/src/C3D8Element.cpp
+    ../solver/materials/src/LinearElastic.cpp
+)
+target_include_directories(DisplacementResultSmoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../io/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../model/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/analysis/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../visualization/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/elements/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/materials/include"
+)
+target_link_libraries(DisplacementResultSmoke PRIVATE CAEMath Qt6::Core VTK::CommonDataModel)
+set_target_properties(DisplacementResultSmoke PROPERTIES AUTOMOC OFF)

@@ -31,15 +31,21 @@
 #include <QPlainTextEdit>
 #include <QScreen>
 #include <QSignalBlocker>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStringList>
 #include <QTime>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
+#include <vtkRenderWindow.h>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <filesystem>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -103,6 +109,7 @@ void MainWindow::setupResultPopup() {
     resultDialog_->setAttribute(Qt::WA_TranslucentBackground);
     resultDialog_->setWindowTitle(tr("位移云图"));
     resultDialog_->setFixedWidth(292);
+    resultDialog_->installEventFilter(this);
 
     auto *outer = new QVBoxLayout(resultDialog_);
     outer->setContentsMargins(12, 12, 12, 12);
@@ -117,7 +124,9 @@ void MainWindow::setupResultPopup() {
         "QComboBox QAbstractItemView { color: #436775; background: #f7fbfb; selection-background-color: #dbecee; }"
         "QCheckBox { color: #647e88; spacing: 8px; background: transparent; }"
         "QToolButton { border: none; border-radius: 8px; background: transparent; }"
-        "QToolButton:hover { background: #e4eef0; }"));
+        "QToolButton:hover { background: #e4eef0; }"
+        "QToolButton#ResultPlayback { padding: 5px 12px; color: #3b606c; background: #e4eef0; }"
+        "QToolButton#ResultPlayback:hover, QToolButton#ResultPlayback:checked { background: #d5e7e9; }"));
     auto *shadow = new QGraphicsDropShadowEffect(card);
     shadow->setBlurRadius(22);
     shadow->setOffset(0, 4);
@@ -161,6 +170,64 @@ void MainWindow::setupResultPopup() {
     connect(componentCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateResultDisplay);
     connect(contourCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
     connect(legendCheck_, &QCheckBox::toggled, this, &MainWindow::updateResultDisplay);
+
+    frameControls_ = new QWidget(card);
+    auto *timeline = new QVBoxLayout(frameControls_);
+    timeline->setContentsMargins(0, 0, 0, 0);
+    timeline->setSpacing(6);
+    frameSlider_ = new QSlider(Qt::Horizontal, frameControls_);
+    frameSlider_->setAccessibleName(tr("结果帧进度"));
+    frameSlider_->setRange(0, 0);
+    frameSlider_->setPageStep(1);
+    timeline->addWidget(frameSlider_);
+
+    auto *frameRow = new QHBoxLayout();
+    playFramesButton_ = new QToolButton(frameControls_);
+    playFramesButton_->setObjectName(QStringLiteral("ResultPlayback"));
+    playFramesButton_->setText(tr("播放"));
+    playFramesButton_->setCheckable(true);
+    frameRow->addWidget(playFramesButton_);
+    frameRow->addStretch();
+    frameNumber_ = new QSpinBox(frameControls_);
+    frameNumber_->setRange(1, 1);
+    frameNumber_->setAccessibleName(tr("指定结果帧"));
+    frameNumber_->setKeyboardTracking(false);
+    frameNumber_->installEventFilter(this);
+    frameRow->addWidget(frameNumber_);
+    frameCountLabel_ = new QLabel(frameControls_);
+    frameRow->addWidget(frameCountLabel_);
+    timeline->addLayout(frameRow);
+    frameTimeLabel_ = new QLabel(frameControls_);
+    frameTimeLabel_->setAlignment(Qt::AlignRight);
+    timeline->addWidget(frameTimeLabel_);
+    layout->addWidget(frameControls_);
+    frameControls_->hide();
+
+    frameTimer_ = new QTimer(this);
+    frameTimer_->setInterval(50);
+    frameTimer_->setTimerType(Qt::PreciseTimer);
+    connect(frameTimer_, &QTimer::timeout, this, [this]() {
+        const int next = frameSlider_->value() + 1;
+        frameSlider_->setValue(next > frameSlider_->maximum() ? 0 : next);
+    });
+    connect(playFramesButton_, &QToolButton::toggled, this, [this](bool playing) {
+        playFramesButton_->setText(playing ? tr("暂停") : tr("播放"));
+        if (playing) {
+            contourCheck_->setChecked(true);
+            if (frameSlider_->value() == frameSlider_->maximum())
+                frameSlider_->setValue(0);
+            frameTimer_->start();
+        } else {
+            frameTimer_->stop();
+        }
+    });
+    connect(frameSlider_, &QSlider::valueChanged, this, &MainWindow::showResultFrame);
+    connect(frameSlider_, &QSlider::sliderPressed, this, [this]() { playFramesButton_->setChecked(false); });
+    connect(frameSlider_, &QSlider::actionTriggered, this, [this](int) { playFramesButton_->setChecked(false); });
+    connect(frameNumber_, &QSpinBox::valueChanged, this, [this](int number) {
+        playFramesButton_->setChecked(false);
+        frameSlider_->setValue(number - 1);
+    });
 }
 
 void MainWindow::setupToolPalettes() {
@@ -221,6 +288,9 @@ void MainWindow::setupToolPalettes() {
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (watched == viewport_ && event->type() == QEvent::Resize)
         layoutOverlays();
+    if (playFramesButton_ && ((watched == resultDialog_ && event->type() == QEvent::Hide) ||
+                             (watched == frameNumber_ && event->type() == QEvent::FocusIn)))
+        playFramesButton_->setChecked(false);
     return QMainWindow::eventFilter(watched, event);
 }
 
@@ -279,10 +349,13 @@ bool MainWindow::switchWorkspace(Workspace workspace) {
         if (solving_ || !loadSavedResults())
             return false;
     } else {
+        playFramesButton_->setChecked(false);
+        frameControls_->hide();
         resultDialog_->hide();
         if (workspace_ == Workspace::Postprocess && modelGrid_)
             viewport_->setMesh(modelGrid_, false, false);
         resultGrid_ = nullptr;
+        resultFrames_.clear();
     }
     workspace_ = workspace;
     updateActionStates();
@@ -339,7 +412,8 @@ void MainWindow::updateResultDisplay() {
     static const char *arrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
     static const char *titles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
     if (!viewport_->setContour(arrays[component], titles[component], legendCheck_->isChecked(),
-                               analysisKeyword(currentModel_.analysisType))) {
+                               analysisKeyword(currentModel_.analysisType),
+                               resultFrames_.size() > 1 ? resultRanges_[component].data() : nullptr)) {
         viewport_->clearContour();
         viewResultsAction_->setChecked(false);
         appendLog(tr("无法显示位移数组：%1").arg(QString::fromLatin1(arrays[component])));
@@ -435,14 +509,72 @@ bool MainWindow::loadSavedResults() {
         QMessageBox::warning(this, tr("模型已变化"), tr("INP 文件已被修改。\n请重新选择工作目录以加载新模型，然后重新求解。"));
         return false;
     }
-    const auto loaded = DisplacementResultIO::load(resultFilePath_, modelGrid_, inputFingerprint_);
+    if (resultGrid_)
+        return true;
+
+    auto loaded = DisplacementResultIO::load(resultFilePath_, modelGrid_, inputFingerprint_);
     if (!loaded.success()) {
         QMessageBox::warning(this, tr("结果读取失败"), loaded.error);
         return false;
     }
-    resultGrid_ = loaded.grid;
+    resultFrames_ = std::move(loaded.frames);
+    resultGrid_ = vtkSmartPointer<vtkUnstructuredGrid>::New();
+    resultGrid_->ShallowCopy(modelGrid_);
+    const int frameCount = static_cast<int>(resultFrames_.size());
+    const bool hasHistory = frameCount > 1;
+    if (hasHistory) {
+        for (auto &range : resultRanges_)
+            range = {std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
+        for (const auto &frame : resultFrames_) {
+            for (std::size_t i = 0; i < frame.displacements.size(); i += 3) {
+                const double *u = frame.displacements.data() + i;
+                const std::array<double, 4> values{std::hypot(u[0], u[1], u[2]), u[0], u[1], u[2]};
+                for (std::size_t component = 0; component < values.size(); ++component) {
+                    auto &range = resultRanges_[component];
+                    range[0] = std::min(range[0], values[component]);
+                    range[1] = std::max(range[1], values[component]);
+                }
+            }
+        }
+        if (componentCombo_->currentIndex() == -1) {
+            const QSignalBlocker block(componentCombo_);
+            componentCombo_->setCurrentIndex(0);
+        }
+    }
+    {
+        const QSignalBlocker sliderBlock(frameSlider_);
+        const QSignalBlocker numberBlock(frameNumber_);
+        frameSlider_->setRange(0, frameCount - 1);
+        frameSlider_->setValue(frameCount - 1);
+        frameNumber_->setRange(1, frameCount);
+        frameCountLabel_->setText(tr("/ %1 帧").arg(frameCount));
+    }
+    if (!showResultFrame(frameCount - 1)) {
+        resultGrid_ = nullptr;
+        resultFrames_.clear();
+        QMessageBox::warning(this, tr("结果读取失败"), tr("位移帧与网格节点数不一致。"));
+        return false;
+    }
+    frameControls_->setVisible(hasHistory);
     viewport_->setMesh(resultGrid_, false, false);
-    appendLog(tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
+    appendLog(hasHistory ? tr("已读取 %1 帧位移结果：%2").arg(frameCount).arg(resultFilePath_)
+                         : tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
+    if (!hasHistory && currentModel_.analysisType == AnalysisType::ExplicitDynamics)
+        appendLog(tr("当前结果只有一帧。按 F5 重新求解可生成动画帧。"));
+    return true;
+}
+
+bool MainWindow::showResultFrame(int index) {
+    if (index < 0 || static_cast<std::size_t>(index) >= resultFrames_.size())
+        return false;
+    const auto &frame = resultFrames_[index];
+    if (!vtkBuilder::setDisplacements(resultGrid_, frame.displacements))
+        return false;
+    const QSignalBlocker block(frameNumber_);
+    frameNumber_->setValue(index + 1);
+    frameTimeLabel_->setText(tr("t = %1").arg(frame.time, 0, 'g', 8));
+    if (workspace_ == Workspace::Postprocess && contourCheck_->isChecked() && componentCombo_->currentIndex() >= 0)
+        viewport_->renderWindow()->Render();
     return true;
 }
 
@@ -512,20 +644,21 @@ void MainWindow::onSolve() {
         QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
             try {
                 const AnalysisProblemBuilder builder(model);
-                vtkBuildResult built;
+                QString saveError;
                 if (model.analysisType == AnalysisType::ExplicitDynamics) {
                     const auto problem = builder.buildExplicitDynamicsProblem();
-                    const auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value());
-                    built = vtkBuilder{}.buildResults(model.mesh, builder, solution.displacements, solution.reactions);
-                } else {
-                    const auto system = builder.buildLinearStaticSystem();
-                    LinearStaticSolver solver;
-                    const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
-                    built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
+                    constexpr std::size_t outputIntervals = 120;
+                    const auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
+                    if (!DisplacementResultIO::saveHistory(outputPath, model.mesh, solution.frames, inputHash, saveError))
+                        return saveError;
+                    return {};
                 }
+                const auto system = builder.buildLinearStaticSystem();
+                LinearStaticSolver solver;
+                const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
+                const auto built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
                 if (!built.success())
                     return built.error;
-                QString saveError;
                 if (!DisplacementResultIO::save(outputPath, built.grid, inputHash, saveError))
                     return saveError;
                 return {};

@@ -35,4 +35,7 @@ public:
                                 const LinearStaticResult &solution) const;
     vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                 const std::vector<double> &displacements, const std::vector<double> &reactions) const;
+
+    // 位移按网格点顺序排列，帧切换时复用云图数组及网格拓扑。
+    static bool setDisplacements(vtkUnstructuredGrid *grid, const std::vector<double> &displacements);
 };

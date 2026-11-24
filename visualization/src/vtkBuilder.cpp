@@ -115,3 +115,41 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProb
         result.grid->GetPointData()->AddArray(field);
     return result;
 }
+
+bool vtkBuilder::setDisplacements(vtkUnstructuredGrid *grid, const std::vector<double> &displacements) {
+    if (!grid || displacements.size() != 3 * static_cast<std::size_t>(grid->GetNumberOfPoints()))
+        return false;
+
+    auto *pointData = grid->GetPointData();
+    const auto count = grid->GetNumberOfPoints();
+    const auto getArray = [&](const char *name, int components) {
+        auto *array = vtkDoubleArray::SafeDownCast(pointData->GetArray(name));
+        if (!array) {
+            auto created = vtkSmartPointer<vtkDoubleArray>::New();
+            created->SetName(name);
+            pointData->AddArray(created);
+            array = created;
+        }
+        array->SetNumberOfComponents(components);
+        array->SetNumberOfTuples(count);
+        return array;
+    };
+    auto *vectors = getArray("Displacements", 3);
+    auto *magnitude = getArray("DisplacementMagnitude", 1);
+    auto *x = getArray("DisplacementX", 1);
+    auto *y = getArray("DisplacementY", 1);
+    auto *z = getArray("DisplacementZ", 1);
+    pointData->SetActiveVectors("Displacements");
+    for (vtkIdType point = 0; point < count; ++point) {
+        const double *u = displacements.data() + 3 * point;
+        vectors->SetTypedTuple(point, u);
+        magnitude->SetValue(point, std::hypot(u[0], u[1], u[2]));
+        x->SetValue(point, u[0]);
+        y->SetValue(point, u[1]);
+        z->SetValue(point, u[2]);
+    }
+    for (auto *array : {vectors, magnitude, x, y, z})
+        array->Modified();
+    grid->Modified();
+    return true;
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DisplacementFrame.h"
 #include "FEModel.h"
 
 #include <QByteArray>
@@ -8,11 +9,18 @@
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
 
+#include <array>
+
 class QAction;
 class QCheckBox;
 class QComboBox;
 class QDialog;
+class QLabel;
 class QPlainTextEdit;
+class QSlider;
+class QSpinBox;
+class QTimer;
+class QToolButton;
 class FloatingToolPalette;
 class SoftLogPanel;
 class MeshViewport;
@@ -47,6 +55,7 @@ private:
     bool switchWorkspace(Workspace workspace);
     void updateActionStates();
     bool loadSavedResults();
+    bool showResultFrame(int index);
 
     QPlainTextEdit *logWidget_ = nullptr;
     SoftLogPanel *logPanel_ = nullptr;
@@ -58,6 +67,13 @@ private:
     QComboBox *componentCombo_ = nullptr;
     QCheckBox *contourCheck_ = nullptr;
     QCheckBox *legendCheck_ = nullptr;
+    QWidget *frameControls_ = nullptr;
+    QSlider *frameSlider_ = nullptr;
+    QSpinBox *frameNumber_ = nullptr;
+    QLabel *frameCountLabel_ = nullptr;
+    QLabel *frameTimeLabel_ = nullptr;
+    QToolButton *playFramesButton_ = nullptr;
+    QTimer *frameTimer_ = nullptr;
 
     QAction *openAction_ = nullptr;
     QAction *solveAction_ = nullptr;
@@ -75,4 +91,6 @@ private:
     FEModel currentModel_;
     vtkSmartPointer<vtkUnstructuredGrid> modelGrid_;
     vtkSmartPointer<vtkUnstructuredGrid> resultGrid_;
+    std::vector<DisplacementFrame> resultFrames_;
+    std::array<std::array<double, 2>, 4> resultRanges_{};
 };

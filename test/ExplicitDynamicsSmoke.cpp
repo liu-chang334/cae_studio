@@ -33,9 +33,14 @@ void checkTimeIntegration() {
     expectNear(result.accelerations[1], 0.0, 0.0, "Prescribed acceleration");
     expectNear(result.reactions[1], 2.18, 1e-12, "Reaction");
 
-    const auto shortened = solver.solve(problem, {0.3, 0.2});
+    const auto shortened = solver.solve(problem, {0.3, 0.2}, 8);
     expectNear(shortened.time, 0.3, 0.0, "Final time with shortened increment");
     expectNear(shortened.displacements[0], 0.1998, 1e-12, "Shortened final increment");
+    if (shortened.frames.size() != 3 || shortened.frames.front().displacements != linalg::VectorX{0.0, 0.5} ||
+        shortened.frames.back().displacements != shortened.displacements)
+        throw std::runtime_error("Displacement history must contain distinct initial, intermediate and final states");
+    expectNear(shortened.frames[1].time, 0.2, 0.0, "Intermediate frame time");
+    expectNear(shortened.frames[1].displacements[0], 0.09, 1e-12, "Intermediate frame displacement");
 
     try {
         solver.solve(problem, {2.0, 1.5});
@@ -118,8 +123,15 @@ void checkJob(const char *path) {
     if (problem.elements.size() != 625 || problem.lumpedMass.size() != 2808 || problem.timeDependentLoads.size() != 1)
         throw std::runtime_error("Unexpected explicit problem dimensions in job1");
     const ExplicitDynamicsSolver solver;
-    const auto result = solver.solve(problem, step);
+    const auto result = solver.solve(problem, step, 120);
     expectNear(result.time, step.duration, 0.0, "job1 final time");
+    if (result.frames.size() != 121 || result.frames.front().time != 0.0 || result.frames.back().time != step.duration ||
+        result.frames.back().displacements != result.displacements)
+        throw std::runtime_error("job1 history did not include the initial state, sampled frames and final state");
+    for (std::size_t i = 1; i < result.frames.size(); ++i) {
+        if (result.frames[i].time <= result.frames[i - 1].time)
+            throw std::runtime_error("job1 history frame times must be strictly increasing");
+    }
     for (const auto nodeId : model.nodeSets.at("nSet-2")) {
         for (int direction = 1; direction <= 3; ++direction)
             expectNear(result.displacements[builder.globalDofIndex(nodeId, direction)], 0.0, 0.0, "Fixed support");

@@ -69,7 +69,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool resetView) {
         renderer_->ResetCameraClippingRange();
 }
 
-bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter) {
+bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter, const double *scalarRange) {
     if (!grid_ || !meshActor_ || !arrayName)
         return false;
     auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
@@ -78,9 +78,12 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
         array->GetNumberOfTuples() == 0) {
         return false;
     }
-    // 1. 获取当前选中结果的范围
+    // 动画使用整个历程的范围，同一种颜色在不同帧中表示相同的位移。
     double range[2];
-    array->GetRange(range);
+    if (scalarRange)
+        std::copy_n(scalarRange, 2, range);
+    else
+        array->GetRange(range);
     if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0] > range[1])
         return false;
     // 常量场：适当扩展范围，避免颜色控制点全部重合
