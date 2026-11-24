@@ -14,19 +14,19 @@ struct ConstraintIndices {
     std::vector<std::size_t> prescribedIndices;
 };
 
-ConstraintIndices collectConstraintIndices(const ConstrainedLinearSystem &system) {
-    const auto &A = system.originalCoefficientMatrix;
-    const auto &b = system.originalRhs;
-    const auto &prescribed = system.prescribedValues;
+ConstraintIndices collectConstraintIndices(const RawLinearSystem &system) {
+    const auto &A = system.originalCoefficientMatrix;  // 原始系数矩阵
+    const auto &b = system.originalRhs;  // 原始右端项
+    const auto &prescribed = system.prescribedValues;  // 约束条件
     const auto size = b.size();
     if (A.rows() != size || A.cols() != size || prescribed.size() != size)
-        throw std::invalid_argument("Constrained linear system dimensions do not match");
+        throw std::invalid_argument("Linear system and prescribed values must have matching dimensions");
     ConstraintIndices indices;
     for (std::size_t index = 0; index < size; ++index) {
         if (prescribed[index].has_value())
-            indices.prescribedIndices.push_back(index);
+            indices.prescribedIndices.push_back(index);  // 约束条件索引
         else
-            indices.freeIndices.push_back(index);
+            indices.freeIndices.push_back(index);  // 自由变量索引
     }
     return indices;
 }
@@ -39,49 +39,46 @@ linalg::VectorX solveSystem(const linalg::MatrixX &coefficientMatrix, const lina
     throw std::invalid_argument("Unsupported linear static algorithm");
 }
 
-linalg::VectorX solveByReduction(const ConstrainedLinearSystem &system, const ConstraintIndices &indices,
+linalg::VectorX solveByReduction(const RawLinearSystem &system, const ConstraintIndices &indices,
                                  LinearStaticAlgorithm algorithm) {
     const auto &A = system.originalCoefficientMatrix;
     const auto &b = system.originalRhs;
     const auto &prescribed = system.prescribedValues;
     const auto freeCount = indices.freeIndices.size();
-    linalg::MatrixX reducedCoefficientMatrix(freeCount, freeCount);
-    linalg::VectorX reducedRhs(freeCount);
+    linalg::MatrixX reducedCoefficientMatrix(freeCount, freeCount);  // 初始化约化系数矩阵
+    linalg::VectorX reducedRhs(freeCount);  // 初始化约化右端项
     for (std::size_t i = 0; i < freeCount; ++i) {
         const auto row = indices.freeIndices[i];
         reducedRhs[i] = b[row];
         for (const auto col : indices.prescribedIndices)
-            reducedRhs[i] -= A(row, col) * prescribed[col].value();
+            reducedRhs[i] -= A(row, col) * prescribed[col].value();  // 计算约化右端项
         for (std::size_t j = 0; j < freeCount; ++j)
-            reducedCoefficientMatrix(i, j) = A(row, indices.freeIndices[j]);
+            reducedCoefficientMatrix(i, j) = A(row, indices.freeIndices[j]);  // 计算约化系数矩阵
     }
 
     const auto freeValues = solveSystem(reducedCoefficientMatrix, reducedRhs, algorithm);
     linalg::VectorX displacements(b.size());
     for (const auto index : indices.prescribedIndices)
-        displacements[index] = prescribed[index].value();
+        displacements[index] = prescribed[index].value();  // 约束条件本身
     for (std::size_t i = 0; i < freeCount; ++i)
-        displacements[indices.freeIndices[i]] = freeValues[i];
+        displacements[indices.freeIndices[i]] = freeValues[i];  // 自由变量解
     return displacements;
 }
 
-linalg::VectorX solveByPenalty(const ConstrainedLinearSystem &system, const ConstraintIndices &indices,
+linalg::VectorX solveByPenalty(const RawLinearSystem &system, const ConstraintIndices &indices,
                                LinearStaticAlgorithm algorithm) {
-    const auto &A = system.originalCoefficientMatrix;
-    const auto &b = system.originalRhs;
+    const auto &A = system.originalCoefficientMatrix;  // 原始系数矩阵
+    const auto &b = system.originalRhs;  // 原始右端项
     if (indices.prescribedIndices.empty())
         return solveSystem(A, b, algorithm);
-
     double diagonalScale = 0.0;
     for (std::size_t index = 0; index < A.rows(); ++index)
-        diagonalScale = std::max(diagonalScale, std::abs(A(index, index)));
-
-    // 按原始系统的对角线量级选取罚参数,零矩阵使用单位量级
+        diagonalScale = std::max(diagonalScale, std::abs(A(index, index)));  // 计算原始系统的对角线量级
+    // 按原始系统的对角线量级选取罚参数, 零矩阵使用单位量级
     constexpr double penaltyMultiplier = 1e8;
     const double penalty = penaltyMultiplier * (diagonalScale == 0.0 ? 1.0 : diagonalScale);
     if (!std::isfinite(penalty))
         throw std::overflow_error("Penalty coefficient is too large");
-
     auto penalizedCoefficientMatrix = A;
     auto penalizedRhs = b;
     for (const auto index : indices.prescribedIndices) {
@@ -95,7 +92,7 @@ linalg::VectorX solveByPenalty(const ConstrainedLinearSystem &system, const Cons
 
 }  // namespace
 
-const LinearStaticResult &LinearStaticSolver::solve(const ConstrainedLinearSystem &system, LinearStaticAlgorithm algorithm,
+const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &system, LinearStaticAlgorithm algorithm,
                                                     LinearStaticConstraintMethod constraintMethod) {
     result_.reset();
     const auto indices = collectConstraintIndices(system);

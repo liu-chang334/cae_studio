@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     }
 
     try {
-        ConstrainedLinearSystem smallSystem{linalg::MatrixX(3, 3), {10.0, 1.0, 7.0}, {std::nullopt, 2.0, std::nullopt}};
+        RawLinearSystem smallSystem{linalg::MatrixX(3, 3), {10.0, 1.0, 7.0}, {std::nullopt, 2.0, std::nullopt}};
         auto &A = smallSystem.originalCoefficientMatrix;
         A(0, 0) = 4.0;
         A(1, 1) = 8.0;

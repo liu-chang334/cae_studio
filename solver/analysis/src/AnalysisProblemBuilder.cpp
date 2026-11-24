@@ -181,7 +181,7 @@ linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness() const {
     return K;
 }
 
-ConstrainedLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
+RawLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
     if (analysisType_ != AnalysisType::Static)
         throw std::invalid_argument("Linear static assembly requires a static analysis step");
     return {assembleElasticStiffness(), forceVector_, prescribedDisplacements_};

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ConstrainedLinearSystem.h"
 #include "Matrix.h"
+#include "RawLinearSystem.h"
 #include "SolidElement3D.h"
 
 #include <memory>
@@ -19,7 +19,7 @@ class AnalysisProblemBuilder {
 public:
     explicit AnalysisProblemBuilder(const FEModel &model);
 
-    ConstrainedLinearSystem buildLinearStaticSystem() const;
+    RawLinearSystem buildLinearStaticSystem() const;
 
     /**
      * @brief 向计算模型中添加一个单元
