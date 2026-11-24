@@ -6,6 +6,12 @@
 #include <stdexcept>
 #include <string>
 
+namespace {
+// 对应 C3D8 单元连接顺序的自然坐标。
+constexpr int nodeSigns[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
+                                 {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
+}
+
 C3D8Element::C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
     : SolidElement3D(std::move(nodes), std::move(material), 8) {
     if (nodeCount() != 8) {
@@ -28,13 +34,11 @@ linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsReference(const linalg::V
     const double r = naturalCoordinates[0];
     const double s = naturalCoordinates[1];
     const double t = naturalCoordinates[2];
-    // 八个局部节点在参考单元中的自然坐标, 用于保留符号
-    constexpr int signs[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}};
     linalg::Matrix<3, 8> gradients{};
     for (int i = 0; i < 8; ++i) {
-        const double ri = signs[i][0];
-        const double si = signs[i][1];
-        const double ti = signs[i][2];
+        const double ri = nodeSigns[i][0];
+        const double si = nodeSigns[i][1];
+        const double ti = nodeSigns[i][2];
         gradients[0][i] = 0.125 * ri * (1.0 + si * s) * (1.0 + ti * t);  // 对r偏导
         gradients[1][i] = 0.125 * si * (1.0 + ti * t) * (1.0 + ri * r);  // 对s偏导
         gradients[2][i] = 0.125 * ti * (1.0 + ri * r) * (1.0 + si * s);  // 对t偏导
@@ -98,6 +102,7 @@ void C3D8Element::initializeGeometry() {
     constexpr double weight = 1.0;
     const auto coordinates = nodeCoordinates();
     volume_ = 0.0;
+    nodalVolumes_.fill(0.0);
     linalg::Matrix<6, 24> averageBvol{};
     // 01. 保存B-Bvol, 累计Bvol的体积积分
     for (std::size_t gp = 0; gp < gaussPoints.size(); ++gp) {
@@ -113,6 +118,13 @@ void C3D8Element::initializeGeometry() {
         auto &point = geometry_[gp];
         point.integrationFactor = detJ * weight;  // 体积积分因子
         volume_ += point.integrationFactor;  // 单元体积
+        const auto &natural = gaussPoints[gp];
+        for (std::size_t node = 0; node < nodalVolumes_.size(); ++node) {
+            const auto &signs = nodeSigns[node];
+            const double shape = 0.125 * (1.0 + signs[0] * natural[0]) * (1.0 + signs[1] * natural[1]) *
+                                 (1.0 + signs[2] * natural[2]);
+            nodalVolumes_[node] += shape * point.integrationFactor;
+        }
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col) {
                 point.Bbar[row][col] = B[row][col] - Bvol[row][col];
@@ -150,6 +162,20 @@ linalg::MatrixX C3D8Element::computeElasticStiffness() const {
         }
     }
     return ke;
+}
+
+linalg::VectorX C3D8Element::computeLumpedMass() const {
+    const auto density = material_->density();
+    if (!density || !std::isfinite(*density) || *density <= 0.0)
+        throw std::invalid_argument("C3D8 requires finite positive density for explicit dynamics");
+
+    linalg::VectorX mass(dofCount());
+    for (std::size_t node = 0; node < nodalVolumes_.size(); ++node) {
+        const double nodalMass = *density * nodalVolumes_[node];
+        for (std::size_t direction = 0; direction < 3; ++direction)
+            mass[3 * node + direction] = nodalMass;
+    }
+    return mass;
 }
 
 std::array<IntegrationPointState, 8> C3D8Element::recoverElasticState(const linalg::Vector<24> &elementDisplacements) const {

@@ -69,8 +69,10 @@ std::shared_ptr<const Material3D> resolveMaterial(MeshId elementId, const FEMode
     const MaterialData &data = *definition->second;
     if (!data.elastic)  // 如果数据中没有弹性参数
         throw std::invalid_argument(label + " requires a linear elastic material: " + name);
+    if (model.analysisType == AnalysisType::ExplicitDynamics && data.plasticity)
+        throw std::invalid_argument(label + " requires a linear elastic material for explicit dynamics: " + name);
     // 创建新材料实例
-    std::shared_ptr<const Material3D> material = std::make_shared<const LinearElasticMaterial>(*data.elastic);
+    std::shared_ptr<const Material3D> material = std::make_shared<const LinearElasticMaterial>(*data.elastic, data.density);
     materialCache.emplace(name, material);
     return material;
 }
@@ -133,15 +135,28 @@ AnalysisProblemBuilder::AnalysisProblemBuilder(const FEModel &model) : analysisT
 void AnalysisProblemBuilder::initializeNodalConditions(const FEModel &model) {
     forceVector_.assign(globalDofCount(), 0.0);
     prescribedDisplacements_.assign(globalDofCount(), std::nullopt);
+    std::unordered_map<std::string, std::size_t> amplitudeLoadIndices;
     for (const auto &load : model.loads) {
         if (!std::isfinite(load.magnitude))
             throw std::invalid_argument("Nodal load must be finite");
+        auto *forces = &forceVector_;
+        if (!load.amplitudeName.empty()) {
+            if (analysisType_ != AnalysisType::ExplicitDynamics)
+                throw std::invalid_argument("Nodal load amplitudes require an explicit dynamics step");
+            const auto amplitude = model.smoothStepAmplitudes.find(load.amplitudeName);
+            if (amplitude == model.smoothStepAmplitudes.end())
+                throw std::invalid_argument("Unknown smooth step amplitude: " + load.amplitudeName);
+            const auto [index, inserted] = amplitudeLoadIndices.try_emplace(load.amplitudeName, timeDependentLoads_.size());
+            if (inserted)
+                timeDependentLoads_.push_back({amplitude->second, linalg::VectorX(globalDofCount(), 0.0)});
+            forces = &timeDependentLoads_[index->second].magnitudes;
+        }
         std::unordered_set<MeshId> loadedNodes;
         forEachTargetNode(model, load.target, [&](MeshId nodeId) {
             if (!loadedNodes.insert(nodeId).second)
                 return;
             const auto dof = globalDofIndex(nodeId, load.degreeOfFreedom);
-            auto &force = forceVector_[dof];
+            auto &force = (*forces)[dof];
             force += load.magnitude;
         });
     }
@@ -159,19 +174,24 @@ void AnalysisProblemBuilder::initializeNodalConditions(const FEModel &model) {
     }
 }
 
+std::vector<std::size_t> AnalysisProblemBuilder::elementDofs(const SolidElement3D &element) const {
+    std::vector<std::size_t> dofs;
+    dofs.reserve(element.dofCount());
+    for (const auto &node : element.nodes()) {
+        const auto gx = globalDofIndex(node.id, 1);
+        dofs.push_back(gx);
+        dofs.push_back(gx + 1);
+        dofs.push_back(gx + 2);
+    }
+    return dofs;
+}
+
 linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness() const {
     const auto n = globalDofCount();
     linalg::MatrixX K(n, n);
     for (const auto &entry : elements_) {
         const SolidElement3D &element = *entry.element;
-        std::vector<std::size_t> dofs;
-        dofs.reserve(element.dofCount());
-        for (const auto &node : element.nodes()) {
-            const auto gx = globalDofIndex(node.id, 1);
-            dofs.push_back(gx);  // x
-            dofs.push_back(gx + 1);  // y
-            dofs.push_back(gx + 2);  // z
-        }
+        const auto dofs = elementDofs(element);
         const auto ke = element.computeElasticStiffness();
         for (std::size_t i = 0; i < dofs.size(); ++i) {
             for (std::size_t j = 0; j < dofs.size(); ++j)
@@ -185,4 +205,37 @@ RawLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
     if (analysisType_ != AnalysisType::Static)
         throw std::invalid_argument("Linear static assembly requires a static analysis step");
     return {assembleElasticStiffness(), forceVector_, prescribedDisplacements_};
+}
+
+ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() const {
+    if (analysisType_ != AnalysisType::ExplicitDynamics)
+        throw std::invalid_argument("Explicit dynamics assembly requires an explicit dynamics step");
+    if (elements_.empty())
+        throw std::invalid_argument("Explicit dynamics requires at least one element");
+
+    ExplicitDynamicsProblem problem{linalg::VectorX(globalDofCount(), 0.0), forceVector_, prescribedDisplacements_, {}, timeDependentLoads_};
+    problem.elements.reserve(elements_.size());
+    for (const auto &entry : elements_) {
+        const auto &element = *entry.element;
+        auto dofs = elementDofs(element);
+        try {
+            const auto mass = element.computeLumpedMass();
+            if (mass.size() != dofs.size())
+                throw std::invalid_argument("Lumped mass dimensions do not match element DOFs");
+            for (std::size_t i = 0; i < dofs.size(); ++i)
+                problem.lumpedMass[dofs[i]] += mass[i];
+        } catch (const std::invalid_argument &error) {
+            if (!entry.sourceId)
+                throw;
+            throw std::invalid_argument("Element " + std::to_string(*entry.sourceId) + ": " + error.what());
+        }
+        problem.elements.push_back({std::move(dofs), element.computeElasticStiffness()});
+    }
+
+    for (std::size_t dof = 0; dof < problem.lumpedMass.size(); ++dof) {
+        const double mass = problem.lumpedMass[dof];
+        if (!std::isfinite(mass) || mass < 0.0 || (mass == 0.0 && !problem.prescribedDisplacements[dof]))
+            throw std::invalid_argument("Invalid lumped mass at global DOF " + std::to_string(dof));
+    }
+    return problem;
 }

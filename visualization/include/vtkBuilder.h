@@ -6,6 +6,8 @@
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
 
+#include <vector>
+
 class AnalysisProblemBuilder;
 struct LinearStaticResult;
 
@@ -31,4 +33,6 @@ public:
      */
     vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                 const LinearStaticResult &solution) const;
+    vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
+                                const std::vector<double> &displacements, const std::vector<double> &reactions) const;
 };

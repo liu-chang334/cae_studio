@@ -2,6 +2,7 @@
 #include "AbaqusInpReader.h"
 #include "AnalysisProblemBuilder.h"
 #include "DisplacementResultIO.h"
+#include "ExplicitDynamicsSolver.h"
 #include "LinearStaticSolver.h"
 #include "MeshViewport.h"
 #include "MinimalUi.h"
@@ -448,33 +449,32 @@ bool MainWindow::loadSavedResults() {
 void MainWindow::onSolve() {
     if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
         return;
-    if (currentModel_.analysisType == AnalysisType::ExplicitDynamics) {
-        QMessageBox::information(this, tr("显式动力学"), tr("已识别显式动力学分析步。当前版本暂未接入显式求解器。"));
-        return;
+    QString selectedMethod = tr("显式中心差分法");
+    auto constraintMethod = LinearStaticConstraintMethod::Reduction;
+    if (currentModel_.analysisType == AnalysisType::Static) {
+        QDialog methodDialog(this);
+        methodDialog.setWindowTitle(tr("线性静力求解"));
+        methodDialog.setMinimumWidth(300);
+
+        auto *methods = new QComboBox(&methodDialog);
+        methods->addItem(tr("约化法"), static_cast<int>(LinearStaticConstraintMethod::Reduction));
+        methods->addItem(tr("乘大数法"), static_cast<int>(LinearStaticConstraintMethod::Penalty));
+        auto *form = new QFormLayout();
+        form->addRow(tr("位移约束处理方法"), methods);
+
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &methodDialog);
+        connect(buttons, &QDialogButtonBox::accepted, &methodDialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &methodDialog, &QDialog::reject);
+
+        auto *layout = new QVBoxLayout(&methodDialog);
+        layout->addLayout(form);
+        layout->addWidget(buttons);
+        methodDialog.adjustSize();
+        if (methodDialog.exec() != QDialog::Accepted)
+            return;
+        selectedMethod = methods->currentText();
+        constraintMethod = static_cast<LinearStaticConstraintMethod>(methods->currentData().toInt());
     }
-
-    QDialog methodDialog(this);
-    methodDialog.setWindowTitle(tr("线性静力求解"));
-    methodDialog.setMinimumWidth(300);
-
-    auto *methods = new QComboBox(&methodDialog);
-    methods->addItem(tr("约化法"), static_cast<int>(LinearStaticConstraintMethod::Reduction));
-    methods->addItem(tr("乘大数法"), static_cast<int>(LinearStaticConstraintMethod::Penalty));
-    auto *form = new QFormLayout();
-    form->addRow(tr("位移约束处理方法"), methods);
-
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &methodDialog);
-    connect(buttons, &QDialogButtonBox::accepted, &methodDialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &methodDialog, &QDialog::reject);
-
-    auto *layout = new QVBoxLayout(&methodDialog);
-    layout->addLayout(form);
-    layout->addWidget(buttons);
-    methodDialog.adjustSize();
-    if (methodDialog.exec() != QDialog::Accepted)
-        return;
-    const auto selectedMethod = methods->currentText();
-    const auto constraintMethod = static_cast<LinearStaticConstraintMethod>(methods->currentData().toInt());
 
     QString error;
     const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
@@ -512,10 +512,17 @@ void MainWindow::onSolve() {
         QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
             try {
                 const AnalysisProblemBuilder builder(model);
-                const auto system = builder.buildLinearStaticSystem();
-                LinearStaticSolver solver;
-                const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
-                const auto built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
+                vtkBuildResult built;
+                if (model.analysisType == AnalysisType::ExplicitDynamics) {
+                    const auto problem = builder.buildExplicitDynamicsProblem();
+                    const auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value());
+                    built = vtkBuilder{}.buildResults(model.mesh, builder, solution.displacements, solution.reactions);
+                } else {
+                    const auto system = builder.buildLinearStaticSystem();
+                    LinearStaticSolver solver;
+                    const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
+                    built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
+                }
                 if (!built.success())
                     return built.error;
                 QString saveError;

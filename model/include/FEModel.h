@@ -6,11 +6,17 @@
 #include "MeshData.h"
 
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 enum class AnalysisType { Static, ExplicitDynamics };
+
+struct ExplicitDynamicsStep {
+    double duration = 0.0;
+    std::optional<double> timeIncrement;
+};
 
 /**
  * @brief 有限元模型数据
@@ -28,4 +34,6 @@ struct FEModel {
 
     std::unordered_map<MeshId, std::string> materialNameByElementId; // inp原始单元号->材料名称
     AnalysisType analysisType = AnalysisType::Static;
+    std::optional<ExplicitDynamicsStep> explicitDynamicsStep;
+    std::unordered_map<std::string, SmoothStepAmplitude> smoothStepAmplitudes;
 };

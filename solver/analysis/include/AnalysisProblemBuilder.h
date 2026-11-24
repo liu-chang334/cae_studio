@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ExplicitDynamicsProblem.h"
 #include "Matrix.h"
 #include "RawLinearSystem.h"
 #include "SolidElement3D.h"
@@ -20,6 +21,7 @@ public:
     explicit AnalysisProblemBuilder(const FEModel &model);
 
     RawLinearSystem buildLinearStaticSystem() const;
+    ExplicitDynamicsProblem buildExplicitDynamicsProblem() const;
 
     /**
      * @brief 向计算模型中添加一个单元
@@ -93,6 +95,7 @@ private:
      */
     void initializeNodalConditions(const FEModel &model);
 
+    std::vector<std::size_t> elementDofs(const SolidElement3D &element) const;
     linalg::MatrixX assembleElasticStiffness() const;
 
 private:
@@ -113,6 +116,7 @@ private:
      * @details 每个元素为力值, 用于施加在对应节点的对应方向上
      */
     linalg::VectorX forceVector_;
+    std::vector<ExplicitNodalLoad> timeDependentLoads_;
 
     /**
      * @brief 位移边界条件

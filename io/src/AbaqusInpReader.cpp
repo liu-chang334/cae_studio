@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <vector>
 
-enum Section { None, Node, Element, NodeSet, Load, ConcentratedLoad, Boundary, Elastic };
+enum Section { None, Node, Element, NodeSet, Load, ConcentratedLoad, Boundary, Elastic, Density, ExplicitTime, SmoothAmplitude };
 enum class StepState { ModelData, NeedsProcedure, InStep, Ended };
 
 struct SectionAssignment {
@@ -140,6 +140,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     ElementSectionInfo currentElement;
     std::string currentNodeSetName;
     std::string currentElementSet;
+    std::string currentLoadAmplitude;
+    SmoothStepAmplitude *currentAmplitude = nullptr;
     std::vector<SectionAssignment> sectionAssignments;
     std::vector<BoundaryRow> boundaryRows;
     std::unordered_map<std::string, std::string> nodeSetNames;
@@ -147,6 +149,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     std::size_t stepLine = 0;
     bool nonlinearStep = false;
     bool perturbationStep = false;
+    bool directExplicitTime = false;
+    std::string unsupportedExplicitFeature;
     bool hasConcentratedLoad = false;
     std::string line;
     std::size_t lineNumber = 0;
@@ -160,9 +164,15 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
         if (line.front() == '*') {
             const std::vector<std::string> fields = splitComma(line);
             const std::string keyword = toUpperAscii(fields[0]);
+            if (unsupportedExplicitFeature.empty() &&
+                (keyword == "*PLASTIC" || keyword == "*DLOAD" || keyword == "*DSLOAD" || keyword == "*INITIAL CONDITIONS" ||
+                 keyword == "*BULK VISCOSITY"))
+                unsupportedExplicitFeature = lineMessage(lineNumber, "显式动力分析暂不支持 " + keyword);
             section = Section::None;
             currentNodeSetName.clear();
             currentElementSet.clear();
+            currentLoadAmplitude.clear();
+            currentAmplitude = nullptr;
             if (stepState == StepState::NeedsProcedure) {
                 if (keyword == "*STATIC") {
                     if (nonlinearStep || perturbationStep || fields.size() != 1) {
@@ -171,7 +181,13 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                     }
                     model.analysisType = AnalysisType::Static;
                 } else if (keyword == "*DYNAMIC" && hasKeywordFlag(fields, "EXPLICIT")) {
+                    directExplicitTime = hasKeywordFlag(fields, "DIRECT USER CONTROL");
+                    if (nonlinearStep || perturbationStep || fields.size() != (directExplicitTime ? 3u : 2u)) {
+                        result.error = lineMessage(lineNumber, "当前仅支持小变形显式动力分析及 DIRECT USER CONTROL 步长选项");
+                        return result;
+                    }
                     model.analysisType = AnalysisType::ExplicitDynamics;
+                    section = Section::ExplicitTime;
                 } else {
                     result.error = lineMessage(lineNumber, "*STEP 后需要 *STATIC 或 *DYNAMIC, EXPLICIT，当前为 " + keyword);
                     return result;
@@ -231,12 +247,31 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
             } else if (keyword == "*LOAD") {
                 section = Section::Load;
             } else if (keyword == "*CLOAD") {
-                if (fields.size() != 1) {
-                    result.error = lineMessage(lineNumber, "暂不支持 *CLOAD 的关键字参数");
+                currentLoadAmplitude = toUpperAscii(keywordValue(fields, "AMPLITUDE"));
+                if (fields.size() != 1 && (fields.size() != 2 || currentLoadAmplitude.empty() ||
+                                           model.analysisType != AnalysisType::ExplicitDynamics)) {
+                    result.error = lineMessage(lineNumber, "*CLOAD 仅在显式分析步支持 AMPLITUDE 参数");
                     return result;
                 }
                 hasConcentratedLoad = true;
                 section = Section::ConcentratedLoad;
+            } else if (keyword == "*AMPLITUDE" && toUpperAscii(keywordValue(fields, "DEFINITION")) == "SMOOTH STEP") {
+                const auto name = toUpperAscii(keywordValue(fields, "NAME"));
+                const auto time = toUpperAscii(keywordValue(fields, "TIME"));
+                const auto value = toUpperAscii(keywordValue(fields, "VALUE"));
+                const std::size_t expectedFieldCount = 3 + !time.empty() + !value.empty();
+                if (name.empty() || fields.size() != expectedFieldCount || (!time.empty() && time != "STEP TIME" && time != "TOTAL TIME") ||
+                    (!value.empty() && value != "RELATIVE")) {
+                    result.error = lineMessage(lineNumber, "SMOOTH STEP 幅值需要 NAME 且使用相对幅值和分析步时间或总时间");
+                    return result;
+                }
+                const auto [amplitude, inserted] = model.smoothStepAmplitudes.try_emplace(name);
+                if (!inserted) {
+                    result.error = lineMessage(lineNumber, "SMOOTH STEP 幅值名称重复：" + name);
+                    return result;
+                }
+                currentAmplitude = &amplitude->second;
+                section = Section::SmoothAmplitude;
             } else if (keyword == "*BOUNDARY") {
                 if (fields.size() != 1) {
                     result.error = lineMessage(lineNumber, "暂不支持 *BOUNDARY 的关键字参数");
@@ -265,6 +300,12 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                     return result;
                 }
                 section = Section::Elastic;
+            } else if (keyword == "*DENSITY") {
+                if (model.materials.empty() || fields.size() != 1) {
+                    result.error = lineMessage(lineNumber, "*DENSITY 需要所属的 *MATERIAL，且仅支持常量密度");
+                    return result;
+                }
+                section = Section::Density;
             }
             continue;
         }
@@ -323,7 +364,23 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 return result;
             }
             auto target = section == Section::Load ? NodeTarget{parts[0]} : parseNodeTarget(parts[0]);
-            model.loads.push_back({std::move(target), dof, value});
+            model.loads.push_back({std::move(target), dof, value, currentLoadAmplitude});
+        } else if (section == Section::SmoothAmplitude) {
+            while (!parts.empty() && parts.back().empty())
+                parts.pop_back();
+            if (parts.empty() || parts.size() % 2 != 0) {
+                result.error = lineMessage(lineNumber, "SMOOTH STEP 幅值数据需要成对的时间和值");
+                return result;
+            }
+            for (std::size_t i = 0; i < parts.size(); i += 2) {
+                AmplitudePoint point{};
+                if (!parseDouble(parts[i], point.time) || !parseDouble(parts[i + 1], point.value) || point.time < 0.0 ||
+                    (!currentAmplitude->empty() && point.time <= currentAmplitude->back().time)) {
+                    result.error = lineMessage(lineNumber, "SMOOTH STEP 幅值需要严格递增的非负时间和有限幅值");
+                    return result;
+                }
+                currentAmplitude->push_back(point);
+            }
         } else if (section == Section::Boundary) {
             boundaryRows.push_back({std::move(parts), lineNumber});
         } else if (section == Section::Elastic) {
@@ -333,6 +390,27 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 return result;
             }
             model.materials.back().elastic = elastic;
+        } else if (section == Section::Density) {
+            while (!parts.empty() && parts.back().empty())
+                parts.pop_back();
+            double density{};
+            auto &materialDensity = model.materials.back().density;
+            if (materialDensity || parts.size() != 1 || !parseDouble(parts[0], density) || density <= 0.0) {
+                result.error = lineMessage(lineNumber, "每种材料的 *DENSITY 需要一条有限正密度数据");
+                return result;
+            }
+            materialDensity = density;
+        } else if (section == Section::ExplicitTime) {
+            while (!parts.empty() && parts.back().empty())
+                parts.pop_back();
+            double duration{};
+            double increment{};
+            if (model.explicitDynamicsStep || parts.size() != 2 || !parseDouble(parts[1], duration) || duration <= 0.0 ||
+                (directExplicitTime ? (!parseDouble(parts[0], increment) || increment <= 0.0) : !parts[0].empty())) {
+                result.error = lineMessage(lineNumber, "*DYNAMIC, EXPLICIT 需要正的总时间。首列在 DIRECT USER CONTROL 下填写正步长，其余情况留空");
+                return result;
+            }
+            model.explicitDynamicsStep = ExplicitDynamicsStep{duration, directExplicitTime ? std::optional<double>{increment} : std::nullopt};
         }
     }
     if (input.bad() || !input.eof()) {
@@ -342,6 +420,16 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     if (stepState == StepState::NeedsProcedure || stepState == StepState::InStep) {
         result.error = lineMessage(stepLine, stepState == StepState::NeedsProcedure ? "*STEP 缺少分析过程卡片" : "*STEP 缺少 *END STEP");
         return result;
+    }
+    if (model.analysisType == AnalysisType::ExplicitDynamics) {
+        if (!unsupportedExplicitFeature.empty()) {
+            result.error = unsupportedExplicitFeature;
+            return result;
+        }
+        if (!model.explicitDynamicsStep) {
+            result.error = lineMessage(stepLine, "*DYNAMIC, EXPLICIT 缺少总时间数据行");
+            return result;
+        }
     }
     if (model.mesh.nodes.empty() || model.mesh.elements.empty()) {
         result.error = "未读取到有效网格";
@@ -379,6 +467,13 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     for (auto &load : model.loads) {
         if (!validateTarget(load.target, "载荷"))
             return result;
+        if (!load.amplitudeName.empty()) {
+            const auto amplitude = model.smoothStepAmplitudes.find(load.amplitudeName);
+            if (amplitude == model.smoothStepAmplitudes.end() || amplitude->second.empty()) {
+                result.error = "*CLOAD 引用的 SMOOTH STEP 幅值不存在、缺少数据或定义类型不受支持：" + load.amplitudeName;
+                return result;
+            }
+        }
     }
     for (auto &boundary : model.boundaries) {
         if (!validateTarget(boundary.target, "边界条件"))

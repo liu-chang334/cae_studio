@@ -48,6 +48,9 @@ public:
     const std::vector<IntegrationPointState> &integrationPointStates() const { return integrationPointStates_; }
 
     virtual linalg::MatrixX computeElasticStiffness() const = 0;
+    virtual linalg::VectorX computeLumpedMass() const {
+        throw std::invalid_argument("Element does not support lumped mass");
+    }
 
 protected:
     /**

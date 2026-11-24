@@ -35,3 +35,22 @@ target_link_libraries(AnalysisModelSmoke PRIVATE CAEMath)
 # 没有Qt类, 关闭AUTOMOC
 set_target_properties(C3D8Smoke PROPERTIES AUTOMOC OFF)
 set_target_properties(AnalysisModelSmoke PROPERTIES AUTOMOC OFF)
+
+add_executable(ExplicitDynamicsSmoke
+    ExplicitDynamicsSmoke.cpp
+    ../io/src/AbaqusInpReader.cpp
+    ../solver/analysis/src/AnalysisProblemBuilder.cpp
+    ../solver/analysis/src/ExplicitDynamicsSolver.cpp
+    ../solver/analysis/src/LinearStaticSolver.cpp
+    ../solver/elements/src/C3D8Element.cpp
+    ../solver/materials/src/LinearElastic.cpp
+)
+target_include_directories(ExplicitDynamicsSmoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../io/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../model/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/analysis/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/elements/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../solver/materials/include"
+)
+target_link_libraries(ExplicitDynamicsSmoke PRIVATE CAEMath)
+set_target_properties(ExplicitDynamicsSmoke PROPERTIES AUTOMOC OFF)

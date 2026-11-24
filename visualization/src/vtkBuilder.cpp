@@ -79,10 +79,15 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
 
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                         const LinearStaticResult &solution) const {
+    return buildResults(mesh, analysis, solution.displacements, solution.reactions);
+}
+
+vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
+                                        const std::vector<double> &displacementValues, const std::vector<double> &reactionValues) const {
     auto result = build(mesh);
     if (!result.success())
         return result;
-    if (solution.displacements.size() != analysis.globalDofCount() || solution.reactions.size() != analysis.globalDofCount())
+    if (displacementValues.size() != analysis.globalDofCount() || reactionValues.size() != analysis.globalDofCount())
         return {nullptr, QStringLiteral("结果向量维度与自由度数量不一致")};
     auto displacements = vtkSmartPointer<vtkDoubleArray>::New();
     displacements->SetName("Displacements");
@@ -97,8 +102,8 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProb
     }
     for (const auto &node : mesh.nodes) {
         const auto dof = analysis.globalDofIndex(node.id, 1);
-        const double *u = solution.displacements.data() + dof;
-        const double *rf = solution.reactions.data() + dof;
+        const double *u = displacementValues.data() + dof;
+        const double *rf = reactionValues.data() + dof;
         displacements->InsertNextTypedTuple(u);
         const std::array<double, 8> values = {std::hypot(u[0], u[1], u[2]),    u[0],  u[1],  u[2],
                                               std::hypot(rf[0], rf[1], rf[2]), rf[0], rf[1], rf[2]};

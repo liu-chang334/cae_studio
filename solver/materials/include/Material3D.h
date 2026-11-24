@@ -1,8 +1,17 @@
 #pragma once
 #include "Matrix.h"
 
+#include <optional>
+
 class Material3D {
 public:
     virtual ~Material3D() = default;
     virtual const linalg::Matrix<6, 6> &initialElasticMatrix() const = 0;
+    std::optional<double> density() const { return density_; }
+
+protected:
+    explicit Material3D(std::optional<double> density = std::nullopt) : density_(density) {}
+
+private:
+    std::optional<double> density_;
 };

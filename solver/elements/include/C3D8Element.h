@@ -30,6 +30,9 @@ public:
      */
     linalg::MatrixX computeElasticStiffness() const override;  // NOTE: 后续扩展成弹塑性统一接口
 
+    // 按单元自由度顺序返回集中质量矩阵的对角项。
+    linalg::VectorX computeLumpedMass() const override;
+
     /**
      * @brief 从单元位移恢复积分点状态
      * @param[in] elementDisplacements 单元位移向量, 维度为24
@@ -102,5 +105,6 @@ private:
 
 private:
     std::array<IntegrationPointGeometry, 8> geometry_{};
+    std::array<double, 8> nodalVolumes_{};
     double volume_ = 0.0;
 };

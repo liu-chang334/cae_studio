@@ -32,4 +32,5 @@ struct MaterialData {
     std::string name;
     std::optional<IsotropicElasticData> elastic;
     std::optional<MisesPlasticityData> plasticity;
+    std::optional<double> density;
 };
