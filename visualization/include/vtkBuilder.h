@@ -33,9 +33,14 @@ public:
      */
     vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                 const LinearStaticResult &solution) const;
-    vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
-                                const std::vector<double> &displacements, const std::vector<double> &reactions) const;
+    vtkBuildResult buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis, const std::vector<double> &displacements,
+                                const std::vector<double> &reactions) const;
 
-    // 位移按网格点顺序排列，帧切换时复用云图数组及网格拓扑。
+    /**
+     * @brief 根据逐帧位移数据更新vtk网格的点数据
+     * @param grid 已有的vtk网格
+     * @param displacements 逐帧位移数据
+     * @return true 成功更新网格点数据，false 失败
+     */
     static bool setDisplacements(vtkUnstructuredGrid *grid, const std::vector<double> &displacements);
 };

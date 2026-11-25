@@ -89,35 +89,35 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProb
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                         const std::vector<double> &displacementValues,
                                         const std::vector<double> &reactionValues) const {
-    auto result = build(mesh);
+    auto result = build(mesh);  // 先用mesh构建包含grid的result
     if (!result.success())
         return result;
     if (displacementValues.size() != analysis.globalDofCount() || reactionValues.size() != analysis.globalDofCount())
         return {nullptr, QStringLiteral("结果向量维度与自由度数量不一致")};
-    auto displacements = vtkSmartPointer<vtkDoubleArray>::New();
-    displacements->SetName("Displacements");
-    displacements->SetNumberOfComponents(3);
+    auto displacements = vtkSmartPointer<vtkDoubleArray>::New();  // 创建位移结果数组
+    displacements->SetName("Displacements");  // 数组命名
+    displacements->SetNumberOfComponents(3);  // 数组每个tuple的维度
     const std::array<const char *, 8> names = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ",
                                                "ReactionMagnitude",     "ReactionX",     "ReactionY",     "ReactionZ"};
     std::array<vtkSmartPointer<vtkDoubleArray>, 8> fields;
-    for (std::size_t i = 0; i < fields.size(); ++i) {
+    for (std::size_t i = 0; i < fields.size(); ++i) {  // 逐个初始化结果数组
         fields[i] = vtkSmartPointer<vtkDoubleArray>::New();
         fields[i]->SetName(names[i]);
         fields[i]->SetNumberOfComponents(1);
     }
     for (const auto &node : mesh.nodes) {
         const auto dof = analysis.globalDofIndex(node.id, 1);
-        const double *u = displacementValues.data() + dof;
-        const double *rf = reactionValues.data() + dof;
-        displacements->InsertNextTypedTuple(u);
+        const double *u = displacementValues.data() + dof;  // 指向当前节点x方向的位移值
+        const double *rf = reactionValues.data() + dof;  // 指向当前节点x方向的反力
+        displacements->InsertNextTypedTuple(u);  // 向数组中追加tuple
         const std::array<double, 8> values = {std::hypot(u[0], u[1], u[2]),    u[0],  u[1],  u[2],
                                               std::hypot(rf[0], rf[1], rf[2]), rf[0], rf[1], rf[2]};
         for (std::size_t i = 0; i < fields.size(); ++i)
-            fields[i]->InsertNextValue(values[i]);
+            fields[i]->InsertNextValue(values[i]);  // 向数组中追加值
     }
-    result.grid->GetPointData()->SetVectors(displacements);
+    result.grid->GetPointData()->SetVectors(displacements);  // 把3分量displacements挂到grid的点数据上
     for (const auto &field : fields)
-        result.grid->GetPointData()->AddArray(field);
+        result.grid->GetPointData()->AddArray(field);  // 把8个结果数组挂到grid的点数据上
     return result;
 }
 
@@ -125,9 +125,9 @@ bool vtkBuilder::setDisplacements(vtkUnstructuredGrid *grid, const std::vector<d
     if (!grid || displacements.size() != 3 * static_cast<std::size_t>(grid->GetNumberOfPoints()))
         return false;
 
-    auto *pointData = grid->GetPointData();
-    const auto count = grid->GetNumberOfPoints();
-    const auto getArray = [&](const char *name, int components) {
+    auto *pointData = grid->GetPointData();  // 获取网格的点数据容器
+    const auto count = grid->GetNumberOfPoints();  // 获取网格点数量
+    const auto getArray = [&](const char *name, int components) {  // 根据名称获取或创建数组
         auto *array = vtkDoubleArray::SafeDownCast(pointData->GetArray(name));
         if (!array) {
             auto created = vtkSmartPointer<vtkDoubleArray>::New();
@@ -145,16 +145,16 @@ bool vtkBuilder::setDisplacements(vtkUnstructuredGrid *grid, const std::vector<d
     auto *y = getArray("DisplacementY", 1);
     auto *z = getArray("DisplacementZ", 1);
     pointData->SetActiveVectors("Displacements");
-    for (vtkIdType point = 0; point < count; ++point) {
+    for (vtkIdType point = 0; point < count; ++point) {  // 依次更新所有点
         const double *u = displacements.data() + 3 * point;
-        vectors->SetTypedTuple(point, u);
-        magnitude->SetValue(point, std::hypot(u[0], u[1], u[2]));
-        x->SetValue(point, u[0]);
-        y->SetValue(point, u[1]);
-        z->SetValue(point, u[2]);
+        vectors->SetTypedTuple(point, u);  // 设置当前点的3分量位移
+        magnitude->SetValue(point, std::hypot(u[0], u[1], u[2]));  // 设置当前点的位移模
+        x->SetValue(point, u[0]);  // 设置当前点的x方向位移
+        y->SetValue(point, u[1]);  // 设置当前点的y方向位移
+        z->SetValue(point, u[2]);  // 设置当前点的z方向位移
     }
     for (auto *array : {vectors, magnitude, x, y, z})
-        array->Modified();
-    grid->Modified();
+        array->Modified();  // 更新数组的修改时间
+    grid->Modified();  // 更新整个网格对象的修改时间
     return true;
 }

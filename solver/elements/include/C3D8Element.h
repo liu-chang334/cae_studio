@@ -12,9 +12,8 @@ class C3D8Element : public SolidElement3D {
 public:
     /**
      * @brief 构造函数
-     * @param id 单元ID
-     * @param nodes 节点列表
-     * @param materialIndex 材料索引
+     * @param nodes 节点拓扑列表
+     * @param material 材料指针
      */
     C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material);
 
@@ -30,23 +29,25 @@ public:
      */
     linalg::MatrixX computeElasticStiffness() const override;  // NOTE: 后续扩展成弹塑性统一接口
 
-    // 按单元自由度顺序返回集中质量矩阵的对角项。
+    /**
+     * @brief 计算单元集中质量矩阵的对角项
+     * @return 单元的集中质量矩阵的对角项, 维度为24
+     */
     linalg::VectorX computeLumpedMass() const override;
 
     /**
      * @brief 从单元位移恢复积分点状态
      * @param[in] elementDisplacements 单元位移向量, 维度为24
      * @return 积分点状态数组, 每个元素为积分点状态结构体
-     * @details 每个积分点的状态包括应变和应变
      */
     std::array<IntegrationPointState, 8> recoverElasticState(const linalg::Vector<24> &elementDisplacements) const;
 
 private:
     /**
-     * @brief 积分点几何信息
+     * @brief 积分点几何信息缓存
      * @details 包含B矩阵(Bbar)和积分体积因子(detJ x 积分权重)
      */
-    struct IntegrationPointGeometry {
+    struct IntegrationPointGeometryCache {
         linalg::Matrix<6, 24> Bbar{};
         double integrationFactor = 0.0;
     };
@@ -104,7 +105,7 @@ private:
     void initializeGeometry();
 
 private:
-    std::array<IntegrationPointGeometry, 8> geometry_{};
-    std::array<double, 8> nodalVolumes_{};
+    std::array<IntegrationPointGeometryCache, 8> geometry_{};
+    std::array<double, 8> nodalVolumes_{};  // 用于计算对各节点集中质量的贡献
     double volume_ = 0.0;
 };
