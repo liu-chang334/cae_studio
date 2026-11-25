@@ -7,8 +7,26 @@
 #include <unordered_set>
 #include <vector>
 
-enum Section { None, Node, Element, NodeSet, Load, ConcentratedLoad, Boundary, Elastic, Density, ExplicitTime, SmoothAmplitude };
-enum class StepState { ModelData, NeedsProcedure, InStep, Ended };
+enum Section {
+    None,  // 跳过数据行
+    Node,  // *NODE节点编号和坐标
+    Element,  // *ELEMENT单元编号和节点连接表
+    NodeSet,  // *NSET节点集成员编号
+    Load,  // 旧版*LOAD，以节点集名称指定集中载荷目标
+    ConcentratedLoad,  // *CLOAD，以节点编号或节点集名称指定集中载荷目标
+    Boundary,  // *BOUNDARY约束数据
+    Elastic,  // *ELASTIC弹性模量和泊松比
+    Density,  // *DENSITY材料密度
+    ExplicitTime,  // *DYNAMIC, EXPLICIT总时间和可选固定时间步长
+    SmoothAmplitude,  // SMOOTH STEP幅值的时间和值对
+};
+
+enum class StepState {
+    ModelData,  // 尚未读到*STEP, 正在读取模型数据
+    NeedsProcedure,  // 已读到*STEP, 等待分析过程卡片
+    InStep,  // 已读到分析过程卡片, 正在读取分析步内容
+    Ended,  // 已读到*END STEP, 分析步结束
+};
 
 struct SectionAssignment {
     std::string setName;
@@ -52,6 +70,7 @@ std::vector<std::string> splitComma(const std::string &line) {
     }
 }
 
+/// @brief 从 INP 卡片的字段中查找指定参数, 返回它在 = 右边的值
 std::string keywordValue(const std::vector<std::string> &fields, const std::string &name) {
     for (std::size_t i = 1; i < fields.size(); ++i) {
         const std::size_t equal = fields[i].find('=');
@@ -154,18 +173,18 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
     bool hasConcentratedLoad = false;
     std::string line;
     std::size_t lineNumber = 0;
-    while (std::getline(input, line)) {
+    while (std::getline(input, line)) {  // 从输入流input逐行读取, 将内容存入字符串line
         ++lineNumber;
         if (lineNumber == 1 && line.compare(0, 3, "\xEF\xBB\xBF") == 0)
-            line.erase(0, 3);
-        line = trim(line);
+            line.erase(0, 3);  // 去掉文件开头可能存在的UTF-8 BOM
+        line = trim(line);  // 去掉line开头和末尾的空白
         if (line.empty() || line.compare(0, 2, "**") == 0)
-            continue;
+            continue;  // 跳过空行和注释行
         if (line.front() == '*') {
-            const std::vector<std::string> fields = splitComma(line);
-            const std::string keyword = toUpperAscii(fields[0]);
+            const std::vector<std::string> fields = splitComma(line);  // 按逗号拆成多个字符串
+            const std::string keyword = toUpperAscii(fields[0]);  // 取首字段并转大写
             if (mode == AbaqusReadMode::MeshOnly && keyword != "*NODE" && keyword != "*ELEMENT") {
-                section = Section::None;
+                section = Section::None;  // 只读网格模式下跳过非节点和单元片段
                 continue;
             }
             if (unsupportedExplicitFeature.empty() && (keyword == "*PLASTIC" || keyword == "*DLOAD" || keyword == "*DSLOAD" ||
@@ -176,20 +195,20 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
             currentElementSet.clear();
             currentLoadAmplitude.clear();
             currentAmplitude = nullptr;
-            if (stepState == StepState::NeedsProcedure) {
+            if (stepState == StepState::NeedsProcedure) {  // 已读到*STEP, 等待分析过程卡片
                 if (keyword == "*STATIC") {
                     if (nonlinearStep || perturbationStep || fields.size() != 1) {
                         result.error = lineMessage(lineNumber, "当前仅支持小变形静力分析，暂不支持该 *STEP 或 *STATIC 选项");
                         return result;
                     }
-                    model.analysisType = AnalysisType::Static;
+                    model.analysisType = AnalysisType::Static;  // 静力分析
                 } else if (keyword == "*DYNAMIC" && hasKeywordFlag(fields, "EXPLICIT")) {
                     directExplicitTime = hasKeywordFlag(fields, "DIRECT USER CONTROL");
                     if (nonlinearStep || perturbationStep || fields.size() != (directExplicitTime ? 3u : 2u)) {
                         result.error = lineMessage(lineNumber, "当前仅支持小变形显式动力分析及 DIRECT USER CONTROL 步长选项");
                         return result;
                     }
-                    model.analysisType = AnalysisType::ExplicitDynamics;
+                    model.analysisType = AnalysisType::ExplicitDynamics;  // 显式动力分析
                     section = Section::ExplicitTime;
                 } else {
                     result.error = lineMessage(lineNumber, "*STEP 后需要 *STATIC 或 *DYNAMIC, EXPLICIT，当前为 " + keyword);
@@ -202,7 +221,7 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
                     return result;
                 }
                 stepLine = lineNumber;
-                stepState = StepState::NeedsProcedure;
+                stepState = StepState::NeedsProcedure;  // 进入分析过程卡片状态
                 nonlinearStep = hasKeywordFlag(fields, "NLGEOM") || toUpperAscii(keywordValue(fields, "NLGEOM")) == "YES";
                 perturbationStep = hasKeywordFlag(fields, "PERTURBATION");
             } else if (keyword == "*END STEP") {
@@ -212,7 +231,7 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
                 }
                 stepState = StepState::Ended;
             } else if (keyword == "*STATIC" || keyword == "*DYNAMIC") {
-                result.error = lineMessage(lineNumber, "分析过程卡片必须紧跟 *STEP，每个分析步只能定义一次分析过程");
+                result.error = lineMessage(lineNumber, "分析过程卡片必须紧跟 *STEP, 每个分析步只能定义一次分析过程");
                 return result;
             } else if (keyword == "*NODE") {
                 section = Section::Node;
