@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ElasticResultFrame.h"
 #include "RawLinearSystem.h"
 
 #include <optional>
@@ -25,6 +26,7 @@ enum class LinearStaticConstraintMethod {
 struct LinearStaticResult {
     linalg::VectorX displacements;  // 位移
     linalg::VectorX reactions;  // 支反力
+    std::optional<ElasticResultFrame> elasticFrame;
 };
 
 /**

@@ -1,4 +1,5 @@
 #pragma once
+#include "IntegrationPointState.h"
 #include "Matrix.h"
 
 #include <optional>
@@ -7,6 +8,9 @@ class Material3D {
 public:
     virtual ~Material3D() = default;
     virtual const linalg::Matrix<6, 6> &initialElasticMatrix() const = 0;
+    // 返回当前增量的试算状态。每次迭代都从同一份已提交状态开始。
+    virtual void integrate(const MaterialPointState &committed, const linalg::Vector<6> &totalStrain,
+                           double timeIncrement, MaterialPointState &trial) const = 0;
     std::optional<double> density() const { return density_; }
 
 protected:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnalysisElement.h"
 #include "Matrix.h"
 
 #include <optional>
@@ -11,4 +12,5 @@ struct RawLinearSystem {
     linalg::VectorX originalRhs;  // 施加指定位移约束前的完整 b
 
     std::vector<std::optional<double>> prescribedValues;  // 待施加的位移边界条件
+    std::vector<AnalysisElement> elementDefinitions;
 };

@@ -20,6 +20,8 @@ public:
     static QByteArray fingerprint(const QString &path, QString &error);
 
     static bool save(const QString &path, vtkUnstructuredGrid *grid, const QByteArray &inputHash, QString &error);
+    static bool save(const QString &path, const MeshData &mesh, const linalg::VectorX &displacements,
+                     const QByteArray &inputHash, QString &error);
     static bool saveHistory(const QString &path, const MeshData &mesh, const std::vector<DisplacementFrame> &frames,
                             const QByteArray &inputHash, QString &error);
 

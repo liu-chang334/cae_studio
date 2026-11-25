@@ -1,11 +1,13 @@
 #pragma once
 
+#include "ElasticResultFrame.h"
 #include "MeshData.h"
 
 #include <QString>
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
 
+#include <array>
 #include <vector>
 
 class AnalysisProblemBuilder;
@@ -19,6 +21,10 @@ struct vtkBuildResult {
 
 class vtkBuilder {
 public:
+    inline static constexpr std::array nodalFieldNames{"Strain11", "Strain22", "Strain33", "Strain12", "Strain13", "Strain23",
+                                                       "Stress11", "Stress22", "Stress33", "Stress12", "Stress13", "Stress23"};
+    using NodalFieldValues = NodalStressStrainValues;
+
     /**
      * @brief 从网格数据中构建vtk网格, 用于显示网格
      * @param mesh 网格数据
@@ -43,4 +49,7 @@ public:
      * @return true 成功更新网格点数据，false 失败
      */
     static bool setDisplacements(vtkUnstructuredGrid *grid, const std::vector<double> &displacements);
+
+    // 将已有的应变应力节点结果填入 VTK 点数据。
+    static bool setNodalFields(vtkUnstructuredGrid *grid, const std::vector<NodalFieldValues> &values);
 };

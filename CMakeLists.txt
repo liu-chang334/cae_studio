@@ -65,10 +65,12 @@ add_executable(CAEStudio
 
   io/src/AbaqusInpReader.cpp
   io/src/DisplacementResultIO.cpp
+  io/src/ElasticResultIO.cpp
 
   solver/elements/src/C3D8Element.cpp # C3D8单元几何计算实现
   solver/materials/src/LinearElastic.cpp # 线性弹性材料实现
   solver/analysis/src/AnalysisProblemBuilder.cpp # 计算问题构建器实现
+  solver/analysis/src/ElementStates.cpp
   solver/analysis/src/ExplicitDynamicsSolver.cpp # 显式动力求解器实现
   solver/analysis/src/LinearStaticSolver.cpp # 线性静力求解器实现
 )

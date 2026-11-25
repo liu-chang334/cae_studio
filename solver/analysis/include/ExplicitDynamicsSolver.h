@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DisplacementFrame.h"
+#include "ElasticResultFrame.h"
 #include "ExplicitDynamicsProblem.h"
 
 struct ExplicitDynamicsStep;
@@ -14,6 +15,8 @@ struct ExplicitDynamicsResult {
     double kineticEnergy = 0.0;
     double strainEnergy = 0.0;
     std::vector<DisplacementFrame> frames;
+    // 有单元定义时，与 frames 同步；未请求历程时只保存末态。
+    std::vector<ElasticResultFrame> elasticFrames;
 };
 
 class ExplicitDynamicsSolver {

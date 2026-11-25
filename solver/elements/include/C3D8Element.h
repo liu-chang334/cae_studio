@@ -35,12 +35,14 @@ public:
      */
     linalg::VectorX computeLumpedMass() const override;
 
+    void updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const override;
+
     /**
-     * @brief 从单元位移恢复积分点状态
-     * @param[in] elementDisplacements 单元位移向量, 维度为24
-     * @return 积分点状态数组, 每个元素为积分点状态结构体
+     * @brief 用 C3D8 的三线性形函数将 2×2×2 高斯点状态外推到 8 个节点
+     * @details 输入采用相同角点符号顺序的高斯点编号，输出采用单元连接顺序。
      */
-    std::array<IntegrationPointState, 8> recoverElasticState(const linalg::Vector<24> &elementDisplacements) const;
+    static std::array<StressStrainState, 8> extrapolateToNodes(const std::array<IntegrationPointState, 8> &states);
+    std::vector<StressStrainState> extrapolateNodalStates(const std::vector<IntegrationPointState> &points) const override;
 
 private:
     /**
@@ -57,6 +59,8 @@ private:
      * @details 返回单元的节点坐标矩阵
      */
     linalg::Matrix<8, 3> nodeCoordinates() const;
+
+    static linalg::Vector<8> computeShapeFunctions(const linalg::Vector<3> &naturalCoordinates);
 
     /**
      * @brief 形函数对自然坐标的导数

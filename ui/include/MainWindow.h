@@ -1,15 +1,14 @@
 #pragma once
 
-#include "DisplacementFrame.h"
+#include "ElasticResultIO.h"
 #include "FEModel.h"
+#include "vtkBuilder.h"
 
 #include <QByteArray>
 #include <QMainWindow>
 #include <QString>
 #include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
-
-#include <array>
 
 class QAction;
 class QCheckBox;
@@ -43,6 +42,7 @@ private slots:
 
 private:
     enum class Workspace { Preprocess, Solve, Postprocess };
+    static constexpr int displacementComponentCount_ = 4;
 
     void setupLogWidget();
     void appendLog(const QString &message);
@@ -56,6 +56,7 @@ private:
     void updateActionStates();
     bool loadSavedResults();
     bool showResultFrame(int index);
+    void updateResultComponents();
 
     QPlainTextEdit *logWidget_ = nullptr;
     SoftLogPanel *logPanel_ = nullptr;
@@ -89,9 +90,10 @@ private:
     QString inputFilePath_;
     QString resultFilePath_;
     QByteArray inputFingerprint_;
+    QByteArray displacementFingerprint_;
     FEModel currentModel_;
     vtkSmartPointer<vtkUnstructuredGrid> modelGrid_;
     vtkSmartPointer<vtkUnstructuredGrid> resultGrid_;
     std::vector<DisplacementFrame> resultFrames_;
-    std::array<std::array<double, 2>, 4> resultRanges_{};
+    ElasticResultIO::NodalHistory nodalFrames_;
 };

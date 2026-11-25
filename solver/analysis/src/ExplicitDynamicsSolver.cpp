@@ -1,4 +1,5 @@
 #include "ExplicitDynamicsSolver.h"
+#include "ElementStates.h"
 #include "FEModel.h"
 
 #include <algorithm>
@@ -139,10 +140,26 @@ ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProbl
         }
     };
 
+    ElementStates states(problem.elementDefinitions, size);
+    double stateTime = 0.0;
+    const auto recordMaterialState = [&] {
+        if (states.empty())
+            return;
+        // 当前为线弹性，材料状态可以在输出步更新；时间积分仍使用单元弹性刚度。
+        states.updateTrial(result.displacements, result.time - stateTime);
+        states.commit();
+        stateTime = result.time;
+        result.elasticFrames.push_back(states.snapshot(result.time));
+    };
+    const auto recordFrame = [&] {
+        recordMaterialState();
+        result.frames.push_back({result.time, result.displacements});
+    };
+
     updateAccelerations(0.0);
     double lastOutputInterval = 0.0;
     if (outputIntervals != 0)
-        result.frames.push_back({0.0, result.displacements});
+        recordFrame();
     for (std::size_t stepNumber = 1; result.time < step.duration; ++stepNumber) {
         const double nextTime = std::min(static_cast<double>(stepNumber) * increment, step.duration);
         const double dt = nextTime - result.time;
@@ -163,7 +180,7 @@ ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProbl
         if (outputIntervals != 0) {
             const double completedInterval = std::floor((result.time / step.duration) * static_cast<double>(outputIntervals));
             if (completedInterval > lastOutputInterval || result.time == step.duration) {
-                result.frames.push_back({result.time, result.displacements});
+                recordFrame();
                 lastOutputInterval = completedInterval;
             }
         }
@@ -181,5 +198,7 @@ ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProbl
     }
     if (!std::isfinite(result.kineticEnergy) || !std::isfinite(result.strainEnergy))
         throw std::overflow_error("Non-finite energy in explicit dynamics");
+    if (outputIntervals == 0)
+        recordMaterialState();
     return result;
 }

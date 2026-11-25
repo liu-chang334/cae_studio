@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IntegrationPointState.h"
+#include "Matrix.h"
 #include "MeshData.h"
 
 #include <memory>
@@ -39,15 +40,12 @@ public:
      * @brief 获取积分点数量
      * @return 积分点数量
      */
-    std::size_t integrationPointCount() const { return integrationPointStates_.size(); }
-
-    /**
-     * @brief 获取积分点状态
-     * @return 积分点状态
-     */
-    const std::vector<IntegrationPointState> &integrationPointStates() const { return integrationPointStates_; }
+    std::size_t integrationPointCount() const { return integrationPointCount_; }
+    ElementState createState() const { return ElementState(integrationPointCount_); }
 
     virtual linalg::MatrixX computeElasticStiffness() const = 0;
+    virtual void updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const = 0;
+    virtual std::vector<StressStrainState> extrapolateNodalStates(const std::vector<IntegrationPointState> &points) const = 0;
     virtual linalg::VectorX computeLumpedMass() const {
         throw std::invalid_argument("Element does not support lumped mass");
     }
@@ -55,18 +53,17 @@ public:
 protected:
     /**
      * @brief 由派生类调用, 初始化公共数据
-     * @param id 单元id
      * @param nodes 按单元连接顺序排列的节点
-     * @param materialIndex 材料数组中的0-based索引
+     * @param material 单元材料
      * @param integrationPointCount 积分点数量
      */
     SolidElement3D(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material, std::size_t integrationPointCount)
-        : nodes_(std::move(nodes)), material_(std::move(material)), integrationPointStates_(integrationPointCount) {
+        : nodes_(std::move(nodes)), material_(std::move(material)), integrationPointCount_(integrationPointCount) {
         if (!material_)
             throw std::invalid_argument("Solid element requires a material");
     }
 
     std::vector<MeshNode> nodes_;
     std::shared_ptr<const Material3D> material_;
-    std::vector<IntegrationPointState> integrationPointStates_;
+    std::size_t integrationPointCount_;
 };

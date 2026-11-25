@@ -2,6 +2,7 @@
 #include "Material3D.h"
 #include "Matrix.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -10,6 +11,7 @@ namespace {
 // 对应 C3D8 单元连接顺序的自然坐标。
 constexpr int nodeSigns[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
                                  {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
+const double gaussCoordinate = 1.0 / std::sqrt(3.0);
 }
 
 C3D8Element::C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
@@ -28,6 +30,16 @@ linalg::Matrix<8, 3> C3D8Element::nodeCoordinates() const {
             coordinates[i][j] = nodes_[i].coordinates[j];
     }
     return coordinates;
+}
+
+linalg::Vector<8> C3D8Element::computeShapeFunctions(const linalg::Vector<3> &naturalCoordinates) {
+    const auto &[r, s, t] = naturalCoordinates;
+    linalg::Vector<8> values{};
+    for (std::size_t node = 0; node < values.size(); ++node) {
+        const auto &[ri, si, ti] = nodeSigns[node];
+        values[node] = 0.125 * (1.0 + ri * r) * (1.0 + si * s) * (1.0 + ti * t);
+    }
+    return values;
 }
 
 linalg::Matrix<3, 8> C3D8Element::computeShapeGradientsReference(const linalg::Vector<3> &naturalCoordinates) {
@@ -96,17 +108,16 @@ linalg::Matrix<6, 24> C3D8Element::computeVolumetricB(const linalg::Matrix<6, 24
 }
 
 void C3D8Element::initializeGeometry() {
-    const double g = 1.0 / std::sqrt(3.0);
-    const std::array<linalg::Vector<3>, 8> gaussPoints{
-        {{-g, -g, -g}, {g, -g, -g}, {g, g, -g}, {-g, g, -g}, {-g, -g, g}, {g, -g, g}, {g, g, g}, {-g, g, g}}};
     constexpr double weight = 1.0;
     const auto coordinates = nodeCoordinates();
     volume_ = 0.0;
     nodalVolumes_.fill(0.0);
     linalg::Matrix<6, 24> averageBvol{};
     // 01. 保存B-Bvol, 累计Bvol的体积积分
-    for (std::size_t gp = 0; gp < gaussPoints.size(); ++gp) {
-        const auto referenceGradients = computeShapeGradientsReference(gaussPoints[gp]);  // 对自然坐标偏导
+    for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
+        const auto &[r, s, t] = nodeSigns[gp];
+        const linalg::Vector<3> natural{r * gaussCoordinate, s * gaussCoordinate, t * gaussCoordinate};
+        const auto referenceGradients = computeShapeGradientsReference(natural);  // 对自然坐标偏导
         const auto jacobian = computeJacobian(referenceGradients, coordinates);  // 雅可比矩阵
         const double detJ = linalg::determinant_3x3(jacobian);
         // 02. 检查雅可比矩阵是否退化
@@ -118,13 +129,9 @@ void C3D8Element::initializeGeometry() {
         auto &point = geometry_[gp];
         point.integrationFactor = detJ * weight;  // 体积积分因子
         volume_ += point.integrationFactor;  // 单元体积
-        const auto &natural = gaussPoints[gp];
-        for (std::size_t node = 0; node < nodalVolumes_.size(); ++node) {
-            const auto &signs = nodeSigns[node];
-            const double shape = 0.125 * (1.0 + signs[0] * natural[0]) * (1.0 + signs[1] * natural[1]) *
-                                 (1.0 + signs[2] * natural[2]);
-            nodalVolumes_[node] += shape * point.integrationFactor;
-        }
+        const auto shape = computeShapeFunctions(natural);
+        for (std::size_t node = 0; node < nodalVolumes_.size(); ++node)
+            nodalVolumes_[node] += shape[node] * point.integrationFactor;
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col) {
                 point.Bbar[row][col] = B[row][col] - Bvol[row][col];
@@ -178,22 +185,55 @@ linalg::VectorX C3D8Element::computeLumpedMass() const {
     return mass;
 }
 
-std::array<IntegrationPointState, 8> C3D8Element::recoverElasticState(const linalg::Vector<24> &elementDisplacements) const {
-    std::array<IntegrationPointState, 8> states{};
-    const auto &D = material_->initialElasticMatrix();  // 取弹性本构矩阵
+void C3D8Element::updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const {
+    if (elementDisplacements.size() != dofCount() || state.committed.size() != geometry_.size() ||
+        state.trial.size() != geometry_.size())
+        throw std::invalid_argument("C3D8 requires 24 displacement components and 8 material points");
+
     for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
-        const auto &Bbar = geometry_[gp].Bbar;  // 取当前积分点的缓存几何信息
-        auto &state = states[gp];  // 取当前积分点的状态
-        // 计算应变
-        for (std::size_t row = 0; row < state.strain.size(); ++row) {
+        const auto &Bbar = geometry_[gp].Bbar;
+        linalg::Vector<6> strain{};
+        for (std::size_t row = 0; row < strain.size(); ++row) {
             for (std::size_t col = 0; col < elementDisplacements.size(); ++col)
-                state.strain[row] += Bbar[row][col] * elementDisplacements[col];  // NOTE: 可以优化为矩阵向量乘法函数
+                strain[row] += Bbar[row][col] * elementDisplacements[col];
         }
-        // 计算应力
-        for (std::size_t row = 0; row < state.stress.size(); ++row) {
-            for (std::size_t col = 0; col < state.strain.size(); ++col)
-                state.stress[row] += D[row][col] * state.strain[col];
-        }
+        material_->integrate(state.committed[gp], strain, timeIncrement, state.trial[gp]);
     }
-    return states;
+}
+
+std::array<StressStrainState, 8> C3D8Element::extrapolateToNodes(const std::array<IntegrationPointState, 8> &states) {
+    // 在高斯点构成的参考立方体内，各高斯点坐标缩放为 ±1，原单元节点坐标缩放为 ±sqrt(3)。
+    static const auto weights = [] {
+        linalg::Matrix<8, 8> result{};
+        for (std::size_t node = 0; node < result.size(); ++node) {
+            const auto &[r, s, t] = nodeSigns[node];
+            result[node] = computeShapeFunctions({r / gaussCoordinate, s / gaussCoordinate, t / gaussCoordinate});
+        }
+        return result;
+    }();
+
+    std::array<StressStrainState, 8> nodalStates{};
+    for (std::size_t node = 0; node < nodalStates.size(); ++node) {
+        auto &state = nodalStates[node];
+        for (std::size_t gp = 0; gp < states.size(); ++gp) {
+            const double weight = weights[node][gp];
+            for (std::size_t component = 0; component < state.strain.size(); ++component) {
+                state.strain[component] += weight * states[gp].strain[component];
+                state.stress[component] += weight * states[gp].stress[component];
+            }
+        }
+        const auto finite = [](double value) { return std::isfinite(value); };
+        if (!std::all_of(state.strain.begin(), state.strain.end(), finite) || !std::all_of(state.stress.begin(), state.stress.end(), finite))
+            throw std::domain_error("C3D8 extrapolated result contains a non-finite component");
+    }
+    return nodalStates;
+}
+
+std::vector<StressStrainState> C3D8Element::extrapolateNodalStates(const std::vector<IntegrationPointState> &points) const {
+    std::array<IntegrationPointState, 8> states{};
+    if (points.size() != states.size())
+        throw std::invalid_argument("C3D8 extrapolation requires 8 integration points");
+    std::copy(points.begin(), points.end(), states.begin());
+    const auto nodalStates = extrapolateToNodes(states);
+    return {nodalStates.begin(), nodalStates.end()};
 }

@@ -1,4 +1,5 @@
 #include "LinearStaticSolver.h"
+#include "ElementStates.h"
 
 #include <algorithm>
 #include <cmath>
@@ -115,6 +116,12 @@ const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &syste
         for (std::size_t col = 0; col < b.size(); ++col)
             reaction += A(row, col) * result.displacements[col];
         result.reactions[row] = reaction;
+    }
+    ElementStates states(system.elementDefinitions, b.size());
+    if (!states.empty()) {
+        states.updateTrial(result.displacements, 0.0);
+        states.commit();
+        result.elasticFrame = states.snapshot(0.0);
     }
     result_ = std::move(result);
     return *result_;

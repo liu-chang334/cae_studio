@@ -69,7 +69,7 @@ void vtkScene::setMesh(vtkUnstructuredGrid *grid, bool resetView) {
         renderer_->ResetCameraClippingRange();
 }
 
-bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter, const double *scalarRange) {
+bool vtkScene::setContour(const char *arrayName, const char *title, bool showLegend, const char *legendFooter) {
     if (!grid_ || !meshActor_ || !arrayName)
         return false;
     auto *mapper = vtkDataSetMapper::SafeDownCast(meshActor_->GetMapper());
@@ -78,17 +78,16 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
         array->GetNumberOfTuples() == 0) {
         return false;
     }
-    // 动画使用整个历程的范围，同一种颜色在不同帧中表示相同的位移。
+    // 每一帧以当前分量的有限值范围更新映射和色标。
     double range[2];
-    if (scalarRange)
-        std::copy_n(scalarRange, 2, range);
-    else
-        array->GetRange(range);
+    array->GetFiniteRange(range);
     if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0] > range[1])
         return false;
     // 常量场：适当扩展范围，避免颜色控制点全部重合
-    if (range[0] == range[1]) {
-        const double padding = std::max(std::abs(range[0]) * 1.0e-6, 1.0e-12);
+    const bool constantField = range[0] == range[1];
+    const double constantValue = range[0];
+    if (constantField) {
+        const double padding = std::max(std::abs(constantValue) * 1.0e-6, 1.0e-12);
         range[0] -= padding;
         range[1] += padding;
     }
@@ -98,7 +97,11 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
     const double span = maxValue - minValue;
     const double midValue = minValue + span * 0.5;
     // 2. 保留原来的蓝 -> 白 -> 红配色
-    auto colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
+    auto colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>(
+        vtkDiscretizableColorTransferFunction::SafeDownCast(mapper->GetLookupTable()));
+    if (!colors)
+        colors = vtkSmartPointer<vtkDiscretizableColorTransferFunction>::New();
+    colors->RemoveAllPoints();
     colors->SetColorSpaceToLab();
     const double colorSaturation = 1.55;
     auto addColor = [&](double t, double r, double g, double b) {
@@ -121,7 +124,6 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
     mapper->SetLookupTable(colors);
     mapper->UseLookupTableScalarRangeOn();
     mapper->SetScalarModeToUsePointFieldData();
-    // 由参数决定数组，不再固定为总位移
     mapper->SelectColorArray(arrayName);
     mapper->InterpolateScalarsBeforeMappingOn();
     mapper->ScalarVisibilityOn();
@@ -166,6 +168,18 @@ bool vtkScene::setContour(const char *arrayName, const char *title, bool showLeg
     // 5. 每次切换结果都更新标题、颜色映射与可见性
     scalarBar_->SetTitle(title ? title : arrayName);
     scalarBar_->SetLookupTable(mapper->GetLookupTable());
+    scalarBar_->SetUseCustomLabels(constantField);
+    if (constantField) {
+        auto *labels = scalarBar_->GetCustomLabels();
+        if (!labels) {
+            auto created = vtkSmartPointer<vtkDoubleArray>::New();
+            created->InsertNextValue(constantValue);
+            scalarBar_->SetCustomLabels(created);
+        } else {
+            labels->SetValue(0, constantValue);
+            labels->Modified();
+        }
+    }
     scalarBar_->SetVisibility(showLegend);
     legendFooter_->SetInput(legendFooter ? legendFooter : "");
     legendFooter_->SetVisibility(showLegend && legendFooter && *legendFooter);

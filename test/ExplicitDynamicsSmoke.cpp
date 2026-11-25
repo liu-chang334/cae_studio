@@ -128,6 +128,20 @@ void checkJob(const char *path) {
     if (result.frames.size() != 121 || result.frames.front().time != 0.0 || result.frames.back().time != step.duration ||
         result.frames.back().displacements != result.displacements)
         throw std::runtime_error("job1 history did not include the initial state, sampled frames and final state");
+    if (result.elasticFrames.size() != result.frames.size())
+        throw std::runtime_error("job1 material snapshots do not match the number of displacement frames");
+    for (std::size_t i = 0; i < result.frames.size(); ++i) {
+        const auto &frame = result.elasticFrames[i];
+        if (frame.time != result.frames[i].time || frame.integrationPoints.size() != model.mesh.elements.size() ||
+            frame.nodes.size() != model.mesh.nodes.size() || frame.integrationPoints.front().size() != 8)
+            throw std::runtime_error("job1 material snapshot does not match the mesh or displacement frame");
+    }
+    const auto &initialStress = result.elasticFrames.front().integrationPoints.front().front().stress;
+    const auto &finalStress = result.elasticFrames.back().integrationPoints.front().front().stress;
+    for (const double value : initialStress)
+        expectNear(value, 0.0, 0.0, "Initial integration point stress");
+    if (initialStress == finalStress)
+        throw std::runtime_error("job1 material state did not change under load");
     for (std::size_t i = 1; i < result.frames.size(); ++i) {
         if (result.frames[i].time <= result.frames[i - 1].time)
             throw std::runtime_error("job1 history frame times must be strictly increasing");
@@ -163,6 +177,8 @@ void checkJob(const char *path) {
     // 独立装配集中质量和刚度后的阶跃载荷模态解，取 t = 0.005 时刻。
     constexpr double referenceU2 = -3.564049727988519e-5;
     const auto transient = solver.solve(problem, {0.005, 0.00002});
+    if (transient.elasticFrames.size() != 1 || transient.elasticFrames.front().time != transient.time)
+        throw std::runtime_error("job1 did not retain the final material state without history output");
     expectNear(transient.displacements[dof], referenceU2, 6e-9, "job1 transient displacement against modal solution");
 
     const auto refined = solver.solve(problem, {0.005, 0.00001});

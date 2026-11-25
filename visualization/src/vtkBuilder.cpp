@@ -2,9 +2,13 @@
 #include "AnalysisProblemBuilder.h"
 #include "LinearStaticSolver.h"
 
+#include <cmath>
+#include <unordered_map>
+
 #include <vtkCellData.h>
 #include <vtkDoubleArray.h>
 #include <vtkPointData.h>
+#include <vtkTypeInt64Array.h>
 
 vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
     vtkBuildResult result;
@@ -83,7 +87,19 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
 
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
                                         const LinearStaticResult &solution) const {
-    return buildResults(mesh, analysis, solution.displacements, solution.reactions);
+    auto result = buildResults(mesh, analysis, solution.displacements, solution.reactions);
+    if (!result.success() || !solution.elasticFrame)
+        return result;
+    const auto &snapshot = solution.elasticFrame->nodes;
+    if (snapshot.size() != analysis.globalDofCount() / 3)
+        return {nullptr, QStringLiteral("节点结果数量与分析模型不一致")};
+    std::vector<NodalFieldValues> values;
+    values.reserve(mesh.nodes.size());
+    for (const auto &node : mesh.nodes)
+        values.push_back(snapshot[analysis.globalDofIndex(node.id, 1) / 3]);
+    if (!setNodalFields(result.grid, values))
+        return {nullptr, QStringLiteral("节点结果数量与网格不一致")};
+    return result;
 }
 
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
@@ -119,6 +135,31 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProb
     for (const auto &field : fields)
         result.grid->GetPointData()->AddArray(field);  // 把8个结果数组挂到grid的点数据上
     return result;
+}
+
+bool vtkBuilder::setNodalFields(vtkUnstructuredGrid *grid, const std::vector<NodalFieldValues> &values) {
+    if (!grid || values.size() != static_cast<std::size_t>(grid->GetNumberOfPoints()))
+        return false;
+
+    auto *pointData = grid->GetPointData();
+    const auto count = grid->GetNumberOfPoints();
+    for (std::size_t component = 0; component < nodalFieldNames.size(); ++component) {
+        const auto *name = nodalFieldNames[component];
+        auto *array = vtkDoubleArray::SafeDownCast(pointData->GetArray(name));
+        if (!array) {
+            auto created = vtkSmartPointer<vtkDoubleArray>::New();
+            created->SetName(name);
+            pointData->AddArray(created);
+            array = created;
+        }
+        array->SetNumberOfComponents(1);
+        array->SetNumberOfTuples(count);
+        for (vtkIdType point = 0; point < count; ++point)
+            array->SetValue(point, values[static_cast<std::size_t>(point)][component]);
+        array->Modified();
+    }
+    grid->Modified();
+    return true;
 }
 
 bool vtkBuilder::setDisplacements(vtkUnstructuredGrid *grid, const std::vector<double> &displacements) {

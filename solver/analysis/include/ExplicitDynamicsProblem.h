@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnalysisElement.h"
 #include "LoadData.h"
 #include "Matrix.h"
 
@@ -23,4 +24,5 @@ struct ExplicitDynamicsProblem {
     std::vector<std::optional<double>> prescribedDisplacements;
     std::vector<ExplicitElement> elements;
     std::vector<ExplicitNodalLoad> timeDependentLoads;
+    std::vector<AnalysisElement> elementDefinitions;
 };

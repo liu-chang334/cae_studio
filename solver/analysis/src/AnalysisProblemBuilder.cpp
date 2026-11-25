@@ -186,13 +186,20 @@ std::vector<std::size_t> AnalysisProblemBuilder::elementDofs(const SolidElement3
     return dofs;
 }
 
-linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness() const {
+std::vector<AnalysisElement> AnalysisProblemBuilder::analysisElements() const {
+    std::vector<AnalysisElement> elements;
+    elements.reserve(elements_.size());
+    for (const auto &entry : elements_)
+        elements.push_back({entry.element, elementDofs(*entry.element), entry.sourceId});
+    return elements;
+}
+
+linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness(const std::vector<AnalysisElement> &elements) const {
     const auto n = globalDofCount();
     linalg::MatrixX K(n, n);
-    for (const auto &entry : elements_) {
-        const SolidElement3D &element = *entry.element;
-        const auto dofs = elementDofs(element);
-        const auto ke = element.computeElasticStiffness();
+    for (const auto &entry : elements) {
+        const auto &dofs = entry.globalDofs;
+        const auto ke = entry.element->computeElasticStiffness();
         for (std::size_t i = 0; i < dofs.size(); ++i) {
             for (std::size_t j = 0; j < dofs.size(); ++j)
                 K(dofs[i], dofs[j]) += ke(i, j);
@@ -204,7 +211,8 @@ linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness() const {
 RawLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
     if (analysisType_ != AnalysisType::Static)
         throw std::invalid_argument("Linear static assembly requires a static analysis step");
-    return {assembleElasticStiffness(), forceVector_, prescribedDisplacements_};
+    auto elements = analysisElements();
+    return {assembleElasticStiffness(elements), forceVector_, prescribedDisplacements_, std::move(elements)};
 }
 
 ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() const {
@@ -213,11 +221,12 @@ ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() c
     if (elements_.empty())
         throw std::invalid_argument("Explicit dynamics requires at least one element");
 
-    ExplicitDynamicsProblem problem{linalg::VectorX(globalDofCount(), 0.0), forceVector_, prescribedDisplacements_, {}, timeDependentLoads_};
+    ExplicitDynamicsProblem problem{linalg::VectorX(globalDofCount(), 0.0), forceVector_, prescribedDisplacements_, {},
+                                    timeDependentLoads_, analysisElements()};
     problem.elements.reserve(elements_.size());
-    for (const auto &entry : elements_) {
+    for (const auto &entry : problem.elementDefinitions) {
         const auto &element = *entry.element;
-        auto dofs = elementDofs(element);
+        const auto &dofs = entry.globalDofs;
         try {
             const auto mass = element.computeLumpedMass();
             if (mass.size() != dofs.size())
@@ -229,7 +238,7 @@ ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() c
                 throw;
             throw std::invalid_argument("Element " + std::to_string(*entry.sourceId) + ": " + error.what());
         }
-        problem.elements.push_back({std::move(dofs), element.computeElasticStiffness()});
+        problem.elements.push_back({dofs, element.computeElasticStiffness()});
     }
 
     for (std::size_t dof = 0; dof < problem.lumpedMass.size(); ++dof) {

@@ -28,8 +28,7 @@ public:
 
     void setMesh(vtkUnstructuredGrid *grid, bool resetView = true);
 
-    bool setContour(const char *arrayName, const char *title, bool showLegend = true, const char *legendFooter = nullptr,
-                    const double *scalarRange = nullptr);
+    bool setContour(const char *arrayName, const char *title, bool showLegend = true, const char *legendFooter = nullptr);
     void setLegendBottomInset(double inset);
 
     void clearContour();

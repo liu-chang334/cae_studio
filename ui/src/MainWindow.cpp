@@ -40,18 +40,21 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent>
-#include <vtkRenderWindow.h>
 
 #include <algorithm>
 #include <cmath>
 #include <exception>
 #include <filesystem>
-#include <limits>
 #include <utility>
 
 namespace {
 
 const char *analysisKeyword(AnalysisType type) { return type == AnalysisType::ExplicitDynamics ? "*Dynamic, Explicit" : "*Static"; }
+
+struct SolveOutput {
+    QString error;
+    QString elasticError;
+};
 
 }  // namespace
 
@@ -106,7 +109,7 @@ void MainWindow::setupCentral() {
 void MainWindow::setupResultPopup() {
     resultDialog_ = new QDialog(this, Qt::Tool | Qt::FramelessWindowHint);
     resultDialog_->setAttribute(Qt::WA_TranslucentBackground);
-    resultDialog_->setWindowTitle(tr("位移云图"));
+    resultDialog_->setWindowTitle(tr("结果云图"));
     resultDialog_->setFixedWidth(292);
     resultDialog_->installEventFilter(this);
 
@@ -137,7 +140,7 @@ void MainWindow::setupResultPopup() {
     layout->setSpacing(14);
 
     auto *heading = new QHBoxLayout();
-    auto *title = new PopupTitleBar(tr("位移云图"), card);
+    auto *title = new PopupTitleBar(tr("结果云图"), card);
     title->setStyleSheet(QStringLiteral("font-size: 13px; font-weight: 600; color: #3b606c;"));
     auto *close = new QToolButton(card);
     close->setIcon(loadUiIcon(QStringLiteral(":/icons/close.svg")));
@@ -150,12 +153,12 @@ void MainWindow::setupResultPopup() {
     layout->addLayout(heading);
     connect(close, &QToolButton::clicked, resultDialog_, &QDialog::hide);
 
-    auto *subtitle = new QLabel(tr("节点结果 · 全局坐标系"), card);
+    auto *subtitle = new QLabel(tr("全局坐标系 · 节点外推结果"), card);
     subtitle->setStyleSheet(QStringLiteral("color: #91a3aa; font-size: 10px;"));
     layout->addWidget(subtitle);
     componentCombo_ = new QComboBox(card);
     componentCombo_->addItems({tr("总位移 |U|"), tr("U1 · X 方向"), tr("U2 · Y 方向"), tr("U3 · Z 方向")});
-    componentCombo_->setPlaceholderText(tr("选择位移分量"));
+    componentCombo_->setPlaceholderText(tr("选择结果分量"));
     componentCombo_->setCurrentIndex(-1);
     auto *form = new QFormLayout();
     form->addRow(tr("分量"), componentCombo_);
@@ -243,8 +246,8 @@ void MainWindow::setupToolPalettes() {
 
     pickElementAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/select-element.svg")), tr("选取单元"), this);
     pickNodeAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/select-node.svg")), tr("选取节点"), this);
-    pickElementAction_->setToolTip(tr("选取单元 · 前处理"));
-    pickNodeAction_->setToolTip(tr("选取节点 · 前处理"));
+    pickElementAction_->setToolTip(tr("选取单元"));
+    pickNodeAction_->setToolTip(tr("选取节点"));
     pickElementAction_->setCheckable(true);
     pickNodeAction_->setCheckable(true);
     auto *selection = new QActionGroup(this);
@@ -253,11 +256,13 @@ void MainWindow::setupToolPalettes() {
     selection->addAction(pickNodeAction_);
     pickElementAction_->setChecked(true);
     connect(pickElementAction_, &QAction::triggered, this, [this]() {
-        switchWorkspace(Workspace::Preprocess);
+        if (workspace_ != Workspace::Postprocess)
+            switchWorkspace(Workspace::Preprocess);
         viewport_->setNodePickingEnabled(false);
     });
     connect(pickNodeAction_, &QAction::triggered, this, [this]() {
-        switchWorkspace(Workspace::Preprocess);
+        if (workspace_ != Workspace::Postprocess)
+            switchWorkspace(Workspace::Preprocess);
         viewport_->setNodePickingEnabled(true);
     });
 
@@ -268,7 +273,7 @@ void MainWindow::setupToolPalettes() {
     viewResultsAction_ = new QAction(loadUiIcon(QStringLiteral(":/icons/contour.svg")), tr("显示云图"), this);
     viewResultsAction_->setCheckable(true);
     viewResultsAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
-    viewResultsAction_->setToolTip(tr("显示云图 · 选择位移分量 · Ctrl+R"));
+    viewResultsAction_->setToolTip(tr("显示位移、应变或应力云图 · Ctrl+R"));
     addAction(viewResultsAction_);
     connect(viewResultsAction_, &QAction::triggered, this, &MainWindow::showResultOptions);
 
@@ -328,6 +333,26 @@ void MainWindow::showElementInfo(MeshId elementId) {
     for (MeshId id : it->nodeIds)
         nodeIds.append(QString::number(static_cast<qlonglong>(id)));
     appendLog(tr("单元 %1 · 节点 [%2]").arg(static_cast<qlonglong>(elementId)).arg(nodeIds.join(", ")));
+    if (workspace_ != Workspace::Postprocess || nodalFrames_.empty())
+        return;
+    QString error;
+    const auto paths = ElasticResultPaths::forDisplacement(resultFilePath_);
+    const auto frame = static_cast<std::size_t>(frameSlider_->value());
+    const auto points = ElasticResultIO::loadIntegrationPoints(paths, *it, resultFrames_, frame, displacementFingerprint_, error);
+    if (points.empty()) {
+        appendLog(error);
+        return;
+    }
+    const auto components = [](const auto &values) {
+        QStringList text;
+        for (const double value : values)
+            text.append(QString::number(value, 'g', 8));
+        return text.join(", ");
+    };
+    appendLog(tr("t = %1 · 积分点分量顺序 11, 22, 33, 12, 13, 23").arg(resultFrames_[frame].time, 0, 'g', 8));
+    for (std::size_t gp = 0; gp < points.size(); ++gp) {
+        appendLog(tr("积分点 %1 · E [%2] · S [%3]").arg(gp + 1).arg(components(points[gp].strain), components(points[gp].stress)));
+    }
 }
 
 void MainWindow::showNodeInfo(MeshId nodeId) {
@@ -341,6 +366,23 @@ void MainWindow::showNodeInfo(MeshId nodeId) {
                   .arg(xyz[0], 0, 'g', 10)
                   .arg(xyz[1], 0, 'g', 10)
                   .arg(xyz[2], 0, 'g', 10));
+    if (workspace_ != Workspace::Postprocess || nodalFrames_.empty())
+        return;
+    const auto point = static_cast<std::size_t>(it - nodes.begin());
+    const auto &values = nodalFrames_[frameSlider_->value()][point];
+    if (std::isnan(values.front())) {
+        appendLog(tr("该节点没有相邻单元的应变和应力结果。"));
+        return;
+    }
+    const auto components = [&values](std::size_t offset) {
+        QStringList result;
+        for (std::size_t i = 0; i < 6; ++i)
+            result.append(QString::number(values[offset + i], 'g', 8));
+        return result.join(", ");
+    };
+    appendLog(tr("节点分量（11, 22, 33, 12, 13, 23）"));
+    appendLog(tr("应变 E（工程剪应变）[%1]").arg(components(0)));
+    appendLog(tr("应力 S [%1]").arg(components(6)));
 }
 
 bool MainWindow::switchWorkspace(Workspace workspace) {
@@ -355,6 +397,8 @@ bool MainWindow::switchWorkspace(Workspace workspace) {
             viewport_->setMesh(modelGrid_, false, false);
         resultGrid_ = nullptr;
         resultFrames_.clear();
+        nodalFrames_.clear();
+        displacementFingerprint_.clear();
     }
     workspace_ = workspace;
     updateActionStates();
@@ -371,7 +415,7 @@ void MainWindow::updateActionStates() {
     viewResultsAction_->setEnabled(hasFullModel && hasResultFile && !solving_);
     pickNodeAction_->setEnabled(hasModel);
     pickElementAction_->setEnabled(hasModel);
-    solveAction_->setToolTip(solving_ ? tr("正在计算并保存位移…") : tr("求解并保存位移 · F5"));
+    solveAction_->setToolTip(solving_ ? tr("正在求解并保存结果…") : tr("求解并保存结果 · F5"));
     viewResultsAction_->setChecked(workspace_ == Workspace::Postprocess && componentCombo_->currentIndex() >= 0 &&
                                    contourCheck_->isChecked());
 }
@@ -401,7 +445,8 @@ void MainWindow::showResultOptions() {
 
 void MainWindow::updateResultDisplay() {
     const int component = componentCombo_->currentIndex();
-    const bool hasComponent = component >= 0 && component <= 3;
+    const bool isStressOrStrain = component >= displacementComponentCount_;
+    const bool hasComponent = component >= 0 && (!isStressOrStrain || !nodalFrames_.empty());
     const bool showContour = workspace_ == Workspace::Postprocess && resultGrid_ && hasComponent && contourCheck_->isChecked();
     legendCheck_->setEnabled(hasComponent && contourCheck_->isChecked());
     viewResultsAction_->setChecked(showContour);
@@ -409,14 +454,18 @@ void MainWindow::updateResultDisplay() {
         viewport_->clearContour();
         return;
     }
-    static const char *arrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
-    static const char *titles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
-    if (!viewport_->setContour(arrays[component], titles[component], legendCheck_->isChecked(),
-                               analysisKeyword(currentModel_.analysisType),
-                               resultFrames_.size() > 1 ? resultRanges_[component].data() : nullptr)) {
+    static const char *pointArrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
+    static const char *pointTitles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
+    static const char *stressStrainTitles[] = {"E11\nStrain", "E22\nStrain", "E33\nStrain", "E12\nEng. shear strain",
+                                               "E13\nEng. shear strain", "E23\nEng. shear strain", "S11\nStress", "S22\nStress",
+                                               "S33\nStress", "S12\nStress", "S13\nStress", "S23\nStress"};
+    const int field = isStressOrStrain ? component - displacementComponentCount_ : component;
+    const auto *array = isStressOrStrain ? vtkBuilder::nodalFieldNames[field] : pointArrays[field];
+    const auto *title = isStressOrStrain ? stressStrainTitles[field] : pointTitles[field];
+    if (!viewport_->setContour(array, title, legendCheck_->isChecked(), analysisKeyword(currentModel_.analysisType))) {
         viewport_->clearContour();
         viewResultsAction_->setChecked(false);
-        appendLog(tr("无法显示位移数组：%1").arg(QString::fromLatin1(arrays[component])));
+        appendLog(tr("无法显示结果数组：%1").arg(QString::fromLatin1(array)));
     }
 }
 
@@ -525,35 +574,29 @@ bool MainWindow::loadSavedResults() {
     if (resultGrid_)
         return true;
 
+    const auto displacementHash = DisplacementResultIO::fingerprint(resultFilePath_, error);
+    if (displacementHash.isEmpty()) {
+        QMessageBox::warning(this, tr("结果读取失败"), error);
+        return false;
+    }
     auto loaded = DisplacementResultIO::load(resultFilePath_, modelGrid_, inputFingerprint_);
     if (!loaded.success()) {
         QMessageBox::warning(this, tr("结果读取失败"), loaded.error);
         return false;
     }
+    if (DisplacementResultIO::fingerprint(resultFilePath_, error) != displacementHash) {
+        QMessageBox::warning(this, tr("结果读取失败"), tr("读取期间位移结果发生变化，请重新打开结果。"));
+        return false;
+    }
+    displacementFingerprint_ = displacementHash;
     resultFrames_ = std::move(loaded.frames);
     resultGrid_ = vtkSmartPointer<vtkUnstructuredGrid>::New();
     resultGrid_->ShallowCopy(modelGrid_);
+    const auto paths = ElasticResultPaths::forDisplacement(resultFilePath_);
+    nodalFrames_ = ElasticResultIO::loadNodal(paths, currentModel_.mesh, resultFrames_, displacementFingerprint_, error);
+    updateResultComponents();
     const int frameCount = static_cast<int>(resultFrames_.size());
     const bool hasHistory = frameCount > 1;
-    if (hasHistory) {
-        for (auto &range : resultRanges_)
-            range = {std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
-        for (const auto &frame : resultFrames_) {
-            for (std::size_t i = 0; i < frame.displacements.size(); i += 3) {
-                const double *u = frame.displacements.data() + i;
-                const std::array<double, 4> values{std::hypot(u[0], u[1], u[2]), u[0], u[1], u[2]};
-                for (std::size_t component = 0; component < values.size(); ++component) {
-                    auto &range = resultRanges_[component];
-                    range[0] = std::min(range[0], values[component]);
-                    range[1] = std::max(range[1], values[component]);
-                }
-            }
-        }
-        if (componentCombo_->currentIndex() == -1) {
-            const QSignalBlocker block(componentCombo_);
-            componentCombo_->setCurrentIndex(0);
-        }
-    }
     {
         const QSignalBlocker sliderBlock(frameSlider_);
         const QSignalBlocker numberBlock(frameNumber_);
@@ -565,16 +608,37 @@ bool MainWindow::loadSavedResults() {
     if (!showResultFrame(frameCount - 1)) {
         resultGrid_ = nullptr;
         resultFrames_.clear();
-        QMessageBox::warning(this, tr("结果读取失败"), tr("位移帧与网格节点数不一致。"));
+        nodalFrames_.clear();
+        displacementFingerprint_.clear();
+        QMessageBox::warning(this, tr("结果读取失败"), tr("结果帧与网格尺寸不一致。"));
         return false;
     }
     frameControls_->setVisible(hasHistory);
     viewport_->setMesh(resultGrid_, false, false);
     appendLog(hasHistory ? tr("已读取 %1 帧位移结果：%2").arg(frameCount).arg(resultFilePath_)
                          : tr("已从磁盘读取位移结果：%1").arg(resultFilePath_));
+    if (nodalFrames_.empty()) {
+        appendLog(tr("应变应力结果不可用：%1\n按 F5 重新求解可生成积分点与节点结果。").arg(error));
+    } else {
+        appendLog(tr("已读取节点应变应力 CSV。后处理中可点选单元查看当前帧的积分点结果。"));
+    }
     if (!hasHistory && currentModel_.analysisType == AnalysisType::ExplicitDynamics)
         appendLog(tr("当前结果只有一帧。按 F5 重新求解可生成动画帧。"));
     return true;
+}
+
+void MainWindow::updateResultComponents() {
+    const QSignalBlocker block(componentCombo_);
+    if (nodalFrames_.empty()) {
+        while (componentCombo_->count() > displacementComponentCount_)
+            componentCombo_->removeItem(displacementComponentCount_);
+    } else if (componentCombo_->count() == displacementComponentCount_) {
+        componentCombo_->addItems({tr("应变 E11"), tr("应变 E22"), tr("应变 E33"), tr("工程剪应变 E12"),
+                                   tr("工程剪应变 E13"), tr("工程剪应变 E23"), tr("应力 S11"), tr("应力 S22"),
+                                   tr("应力 S33"), tr("应力 S12"), tr("应力 S13"), tr("应力 S23")});
+    }
+    if (resultFrames_.size() > 1 && componentCombo_->currentIndex() < 0)
+        componentCombo_->setCurrentIndex(0);
 }
 
 bool MainWindow::showResultFrame(int index) {
@@ -583,11 +647,13 @@ bool MainWindow::showResultFrame(int index) {
     const auto &frame = resultFrames_[index];
     if (!vtkBuilder::setDisplacements(resultGrid_, frame.displacements))
         return false;
+    if (!nodalFrames_.empty() && !vtkBuilder::setNodalFields(resultGrid_, nodalFrames_[index]))
+        return false;
     const QSignalBlocker block(frameNumber_);
     frameNumber_->setValue(index + 1);
     frameTimeLabel_->setText(tr("t = %1").arg(frame.time, 0, 'g', 8));
     if (workspace_ == Workspace::Postprocess && contourCheck_->isChecked() && componentCombo_->currentIndex() >= 0)
-        viewport_->renderWindow()->Render();
+        updateResultDisplay();
     return true;
 }
 
@@ -637,46 +703,67 @@ void MainWindow::onSolve() {
     updateActionStates();
     appendLog(tr("正在求解（%1）…").arg(selectedMethod));
 
-    // 空字符串表示成功，后台临时结果网格不直接交给显示层。
-    auto *watcher = new QFutureWatcher<QString>(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]() {
-        const QString jobError = watcher->result();
+    const auto paths = ElasticResultPaths::forDisplacement(resultFilePath_);
+    auto *watcher = new QFutureWatcher<SolveOutput>(this);
+    connect(watcher, &QFutureWatcher<SolveOutput>::finished, this, [this, watcher, paths]() {
+        const auto output = watcher->result();
         watcher->deleteLater();
         solving_ = false;
-        if (!jobError.isEmpty()) {
-            appendLog(jobError);
-            updateActionStates();
+        updateActionStates();
+        if (!output.error.isEmpty()) {
+            appendLog(output.error);
             return;
         }
-        updateActionStates();
         appendLog(tr("位移结果已保存：%1").arg(resultFilePath_));
-        appendLog(tr("点击云图图标，读取结果并选择位移分量。"));
+        if (output.elasticError.isEmpty())
+            appendLog(tr("节点结果已保存：%1\n积分点结果已保存：%2").arg(paths.nodes, paths.integrationPoints));
+        else
+            appendLog(tr("应变应力 CSV 保存失败：%1").arg(output.elasticError));
+        appendLog(tr("点击云图图标查看节点位移、应变和应力。"));
     });
 
     watcher->setFuture(QtConcurrent::run(
-        [model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
+        [model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, paths, constraintMethod]() -> SolveOutput {
+            bool displacementSaved = false;
             try {
                 const AnalysisProblemBuilder builder(model);
                 QString saveError;
-                if (model.analysisType == AnalysisType::ExplicitDynamics) {
+                std::vector<DisplacementFrame> frames;
+                std::vector<ElasticResultFrame> elasticFrames;
+                const bool explicitDynamics = model.analysisType == AnalysisType::ExplicitDynamics;
+                if (explicitDynamics) {
                     const auto problem = builder.buildExplicitDynamicsProblem();
                     constexpr std::size_t outputIntervals = 120;
-                    const auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
-                    if (!DisplacementResultIO::saveHistory(outputPath, model.mesh, solution.frames, inputHash, saveError))
-                        return saveError;
-                    return {};
+                    auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
+                    frames = std::move(solution.frames);
+                    elasticFrames = std::move(solution.elasticFrames);
+                    displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
+                } else {
+                    const auto system = builder.buildLinearStaticSystem();
+                    LinearStaticSolver solver;
+                    const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
+                    frames.push_back({0.0, solution.displacements});
+                    if (solution.elasticFrame)
+                        elasticFrames.push_back(*solution.elasticFrame);
+                    displacementSaved = DisplacementResultIO::save(outputPath, model.mesh, frames.front().displacements,
+                                                                   inputHash, saveError);
                 }
-                const auto system = builder.buildLinearStaticSystem();
-                LinearStaticSolver solver;
-                const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
-                const auto built = vtkBuilder{}.buildResults(model.mesh, builder, solution);
-                if (!built.success())
-                    return built.error;
-                if (!DisplacementResultIO::save(outputPath, built.grid, inputHash, saveError))
-                    return saveError;
+                if (!displacementSaved)
+                    return {saveError, {}};
+                if (elasticFrames.size() != frames.size() ||
+                    !std::equal(elasticFrames.begin(), elasticFrames.end(), frames.begin(),
+                                [](const ElasticResultFrame &elastic, const DisplacementFrame &displacement) {
+                                    return elastic.time == displacement.time;
+                                }))
+                    return {{}, tr("积分点输出帧与位移帧不匹配。")};
+                const auto displacementHash = DisplacementResultIO::fingerprint(outputPath, saveError);
+                if (displacementHash.isEmpty() ||
+                    !ElasticResultIO::save(paths, model.mesh, elasticFrames, displacementHash, saveError))
+                    return {{}, saveError};
                 return {};
             } catch (const std::exception &error) {
-                return QString::fromUtf8(error.what());
+                const auto message = QString::fromUtf8(error.what());
+                return displacementSaved ? SolveOutput{{}, message} : SolveOutput{message, {}};
             }
         }));
 }

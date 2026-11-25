@@ -27,6 +27,19 @@ constexpr const char *HistoryHeader = "Time,NodeId,U1,U2,U3";
 const std::array<const char *, 4> FieldNames = {
     "DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
 
+bool writeStaticRow(QTextStream &out, MeshId id, const std::array<double, 4> &values, QString &error) {
+    out << static_cast<qint64>(id);
+    for (const double value : values) {
+        if (!std::isfinite(value)) {
+            error = QStringLiteral("位移结果包含非有限数值");
+            return false;
+        }
+        out << ',' << value;
+    }
+    out << '\n';
+    return true;
+}
+
 template <typename WriteRows>
 bool writeResult(const QString &path, const QByteArray &inputHash, const char *version, QString &error, WriteRows writeRows) {
     QSaveFile file(path);
@@ -63,12 +76,12 @@ QByteArray DisplacementResultIO::fingerprint(const QString &path, QString &error
     error.clear();
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        error = QStringLiteral("无法读取 INP：%1").arg(file.errorString());
+        error = QStringLiteral("无法读取 %1：%2").arg(path, file.errorString());
         return {};
     }
     QCryptographicHash hash(QCryptographicHash::Sha256);
     if (!hash.addData(&file) || file.error() != QFileDevice::NoError) {
-        error = QStringLiteral("计算 INP 指纹失败：%1").arg(file.errorString());
+        error = QStringLiteral("计算 %1 的指纹失败：%2").arg(path, file.errorString());
         return {};
     }
     return hash.result().toHex();
@@ -100,16 +113,29 @@ bool DisplacementResultIO::save(const QString &path, vtkUnstructuredGrid *grid, 
     return writeResult(path, inputHash, Version, error, [&](QTextStream &out) {
         out << Header << '\n';
         for (vtkIdType point = 0; point < count; ++point) {
-            out << static_cast<qint64>(nodeIds->GetValue(point));
-            for (auto *field : fields) {
-                const double value = field->GetComponent(point, 0);
-                if (!std::isfinite(value)) {
-                    error = QStringLiteral("位移结果包含非有限数值");
-                    return false;
-                }
-                out << ',' << value;
-            }
-            out << '\n';
+            std::array<double, 4> values{};
+            for (std::size_t i = 0; i < values.size(); ++i)
+                values[i] = fields[i]->GetComponent(point, 0);
+            if (!writeStaticRow(out, nodeIds->GetValue(point), values, error))
+                return false;
+        }
+        return true;
+    });
+}
+
+bool DisplacementResultIO::save(const QString &path, const MeshData &mesh, const linalg::VectorX &displacements,
+                                 const QByteArray &inputHash, QString &error) {
+    error.clear();
+    if (mesh.nodes.empty() || displacements.size() != 3 * mesh.nodes.size() || inputHash.isEmpty()) {
+        error = QStringLiteral("位移自由度与网格尺寸不一致或缺少 INP 指纹");
+        return false;
+    }
+    return writeResult(path, inputHash, Version, error, [&](QTextStream &out) {
+        out << Header << '\n';
+        for (std::size_t node = 0; node < mesh.nodes.size(); ++node) {
+            const double *u = displacements.data() + 3 * node;
+            if (!writeStaticRow(out, mesh.nodes[node].id, {std::hypot(u[0], u[1], u[2]), u[0], u[1], u[2]}, error))
+                return false;
         }
         return true;
     });

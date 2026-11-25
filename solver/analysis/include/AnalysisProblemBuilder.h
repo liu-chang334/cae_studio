@@ -76,7 +76,7 @@ private:
      * @details 包含单元指针和源id
      */
     struct Entry {
-        std::unique_ptr<SolidElement3D> element;  // 单元指针
+        std::shared_ptr<const SolidElement3D> element;  // 单元几何和材料定义
         std::optional<MeshId> sourceId;  // 源网格或源节点id
     };
 
@@ -96,7 +96,8 @@ private:
     void initializeNodalConditions(const FEModel &model);
 
     std::vector<std::size_t> elementDofs(const SolidElement3D &element) const;
-    linalg::MatrixX assembleElasticStiffness() const;
+    std::vector<AnalysisElement> analysisElements() const;
+    linalg::MatrixX assembleElasticStiffness(const std::vector<AnalysisElement> &elements) const;
 
 private:
     /**

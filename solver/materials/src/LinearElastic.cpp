@@ -23,3 +23,17 @@ linalg::Matrix<6, 6> computeIsotropicElasticMatrix(const IsotropicElasticData &m
     }
     return D;
 }
+
+void LinearElasticMaterial::integrate(const MaterialPointState &, const linalg::Vector<6> &totalStrain, double,
+                                      MaterialPointState &trial) const {
+    StressStrainState fields{};
+    fields.strain = totalStrain;
+    for (std::size_t row = 0; row < fields.stress.size(); ++row) {
+        for (std::size_t col = 0; col < totalStrain.size(); ++col)
+            fields.stress[row] += elasticMatrix_[row][col] * totalStrain[col];
+        if (!std::isfinite(fields.strain[row]) || !std::isfinite(fields.stress[row]))
+            throw std::domain_error("Linear elastic integration produced a non-finite state");
+    }
+    trial.fields = fields;
+    trial.internalVariables.clear();
+}
