@@ -45,6 +45,10 @@ vtkBuildResult vtkBuilder::build(const MeshData &mesh) const {
             vtkCellType = VTK_HEXAHEDRON;
             expectedNodeCount = 8;
             break;
+        case CellTopology::QUADRATIC_TETRAHEDRON:
+            vtkCellType = VTK_QUADRATIC_TETRA;
+            expectedNodeCount = 10;
+            break;
         default:
             result.error = QStringLiteral("单元 %1 的拓扑类型暂不支持显示（类型值 %2）")
                                .arg(static_cast<qlonglong>(element.id))
@@ -83,7 +87,8 @@ vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProb
 }
 
 vtkBuildResult vtkBuilder::buildResults(const MeshData &mesh, const AnalysisProblemBuilder &analysis,
-                                        const std::vector<double> &displacementValues, const std::vector<double> &reactionValues) const {
+                                        const std::vector<double> &displacementValues,
+                                        const std::vector<double> &reactionValues) const {
     auto result = build(mesh);
     if (!result.success())
         return result;

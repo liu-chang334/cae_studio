@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+enum class AbaqusReadMode {
+    FullModel,  // 读取完整模型
+    MeshOnly,  // 只读取网格数据
+};
+
 /**
  * @brief 单元拓扑和分析类型以及单元节点数
  */
@@ -40,5 +45,5 @@ public:
      * @param path 文件路径
      * @return 读取结果, 包含网格数据, 错误信息, 警告信息
      */
-    AbaqusReadResult read(const std::filesystem::path &path) const;
+    AbaqusReadResult read(const std::filesystem::path &path, AbaqusReadMode mode = AbaqusReadMode::FullModel) const;
 };

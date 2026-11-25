@@ -5,6 +5,18 @@
 
 using MeshId = std::int64_t;  // 源网格或源节点id
 
+enum class CellTopology {
+    Unknown,
+    HEXAHEDRON,  // 六面体
+    QUADRATIC_TETRAHEDRON  // 二次四面体
+};
+enum class ElementFormulation {
+    Unspecified,
+    C3D8,  // C3D8全积分单元
+    C3D8R,  // C3D8R减缩积分单元
+    C3D10  // C3D10全积分单元
+};
+
 /**
  * @brief 网格节点
  * @details 网格节点包含节点ID和3个坐标值
@@ -13,9 +25,6 @@ struct MeshNode {
     MeshId id;
     std::array<double, 3> coordinates;
 };
-
-enum class CellTopology { Unknown, HEXAHEDRON };
-enum class ElementFormulation { Unspecified, C3D8, C3D8R };
 
 /**
  * @brief 网格单元

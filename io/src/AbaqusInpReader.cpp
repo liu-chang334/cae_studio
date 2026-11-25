@@ -128,7 +128,7 @@ std::string lineMessage(std::size_t lineNumber, const std::string &message) {
     return "第 " + std::to_string(lineNumber) + " 行：" + message;
 }
 
-AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const {
+AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, AbaqusReadMode mode) const {
     AbaqusReadResult result;
     auto &model = result.model;
     std::ifstream input(path);
@@ -164,9 +164,12 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
         if (line.front() == '*') {
             const std::vector<std::string> fields = splitComma(line);
             const std::string keyword = toUpperAscii(fields[0]);
-            if (unsupportedExplicitFeature.empty() &&
-                (keyword == "*PLASTIC" || keyword == "*DLOAD" || keyword == "*DSLOAD" || keyword == "*INITIAL CONDITIONS" ||
-                 keyword == "*BULK VISCOSITY"))
+            if (mode == AbaqusReadMode::MeshOnly && keyword != "*NODE" && keyword != "*ELEMENT") {
+                section = Section::None;
+                continue;
+            }
+            if (unsupportedExplicitFeature.empty() && (keyword == "*PLASTIC" || keyword == "*DLOAD" || keyword == "*DSLOAD" ||
+                                                       keyword == "*INITIAL CONDITIONS" || keyword == "*BULK VISCOSITY"))
                 unsupportedExplicitFeature = lineMessage(lineNumber, "显式动力分析暂不支持 " + keyword);
             section = Section::None;
             currentNodeSetName.clear();
@@ -223,6 +226,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                     currentElement = {CellTopology::HEXAHEDRON, ElementFormulation::C3D8, 8};
                 else if (type == "C3D8R")
                     currentElement = {CellTopology::HEXAHEDRON, ElementFormulation::C3D8R, 8};
+                else if (type == "C3D10")
+                    currentElement = {CellTopology::QUADRATIC_TETRAHEDRON, ElementFormulation::C3D10, 10};
                 else {
                     result.warnings.push_back(lineMessage(lineNumber, "暂不支持单元 TYPE=" + type + "，已跳过该段"));
                     continue;
@@ -248,8 +253,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 section = Section::Load;
             } else if (keyword == "*CLOAD") {
                 currentLoadAmplitude = toUpperAscii(keywordValue(fields, "AMPLITUDE"));
-                if (fields.size() != 1 && (fields.size() != 2 || currentLoadAmplitude.empty() ||
-                                           model.analysisType != AnalysisType::ExplicitDynamics)) {
+                if (fields.size() != 1 &&
+                    (fields.size() != 2 || currentLoadAmplitude.empty() || model.analysisType != AnalysisType::ExplicitDynamics)) {
                     result.error = lineMessage(lineNumber, "*CLOAD 仅在显式分析步支持 AMPLITUDE 参数");
                     return result;
                 }
@@ -260,8 +265,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
                 const auto time = toUpperAscii(keywordValue(fields, "TIME"));
                 const auto value = toUpperAscii(keywordValue(fields, "VALUE"));
                 const std::size_t expectedFieldCount = 3 + !time.empty() + !value.empty();
-                if (name.empty() || fields.size() != expectedFieldCount || (!time.empty() && time != "STEP TIME" && time != "TOTAL TIME") ||
-                    (!value.empty() && value != "RELATIVE")) {
+                if (name.empty() || fields.size() != expectedFieldCount ||
+                    (!time.empty() && time != "STEP TIME" && time != "TOTAL TIME") || (!value.empty() && value != "RELATIVE")) {
                     result.error = lineMessage(lineNumber, "SMOOTH STEP 幅值需要 NAME 且使用相对幅值和分析步时间或总时间");
                     return result;
                 }
@@ -407,18 +412,26 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
             double increment{};
             if (model.explicitDynamicsStep || parts.size() != 2 || !parseDouble(parts[1], duration) || duration <= 0.0 ||
                 (directExplicitTime ? (!parseDouble(parts[0], increment) || increment <= 0.0) : !parts[0].empty())) {
-                result.error = lineMessage(lineNumber, "*DYNAMIC, EXPLICIT 需要正的总时间。首列在 DIRECT USER CONTROL 下填写正步长，其余情况留空");
+                result.error = lineMessage(lineNumber,
+                                           "*DYNAMIC, EXPLICIT 需要正的总时间。首列在 DIRECT USER CONTROL 下填写正步长，其余情况留空");
                 return result;
             }
-            model.explicitDynamicsStep = ExplicitDynamicsStep{duration, directExplicitTime ? std::optional<double>{increment} : std::nullopt};
+            model.explicitDynamicsStep =
+                ExplicitDynamicsStep{duration, directExplicitTime ? std::optional<double>{increment} : std::nullopt};
         }
     }
     if (input.bad() || !input.eof()) {
         result.error = "读取文件失败：" + path.u8string();
         return result;
     }
+    if (mode == AbaqusReadMode::MeshOnly) {
+        if (model.mesh.nodes.empty() || model.mesh.elements.empty())
+            result.error = "未读取到有效网格";
+        return result;
+    }
     if (stepState == StepState::NeedsProcedure || stepState == StepState::InStep) {
-        result.error = lineMessage(stepLine, stepState == StepState::NeedsProcedure ? "*STEP 缺少分析过程卡片" : "*STEP 缺少 *END STEP");
+        result.error =
+            lineMessage(stepLine, stepState == StepState::NeedsProcedure ? "*STEP 缺少分析过程卡片" : "*STEP 缺少 *END STEP");
         return result;
     }
     if (model.analysisType == AnalysisType::ExplicitDynamics) {
@@ -438,7 +451,8 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path) const 
     const bool legacyBoundaryFormat = stepLine == 0 && !hasConcentratedLoad;
     for (const auto &row : boundaryRows) {
         if (!appendBoundary(row.fields, legacyBoundaryFormat, model)) {
-            result.error = lineMessage(row.lineNumber, "*BOUNDARY 需要 节点编号或节点集名称, 起始自由度, 结束自由度, 位移值（自由度范围为 1–3）");
+            result.error =
+                lineMessage(row.lineNumber, "*BOUNDARY 需要 节点编号或节点集名称, 起始自由度, 结束自由度, 位移值（自由度范围为 1–3）");
             return result;
         }
     }

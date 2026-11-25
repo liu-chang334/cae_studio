@@ -83,6 +83,7 @@ private:
 
     Workspace workspace_ = Workspace::Preprocess;
     bool solving_ = false;
+    bool meshOnlyPreview_ = false;
     bool palettesPlaced_ = false;
     QString workingDirectory_;
     QString inputFilePath_;

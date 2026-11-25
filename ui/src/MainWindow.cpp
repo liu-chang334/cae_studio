@@ -25,6 +25,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPalette>
@@ -50,9 +51,7 @@
 
 namespace {
 
-const char *analysisKeyword(AnalysisType type) {
-    return type == AnalysisType::ExplicitDynamics ? "*Dynamic, Explicit" : "*Static";
-}
+const char *analysisKeyword(AnalysisType type) { return type == AnalysisType::ExplicitDynamics ? "*Dynamic, Explicit" : "*Static"; }
 
 }  // namespace
 
@@ -288,8 +287,8 @@ void MainWindow::setupToolPalettes() {
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (watched == viewport_ && event->type() == QEvent::Resize)
         layoutOverlays();
-    if (playFramesButton_ && ((watched == resultDialog_ && event->type() == QEvent::Hide) ||
-                             (watched == frameNumber_ && event->type() == QEvent::FocusIn)))
+    if (playFramesButton_ &&
+        ((watched == resultDialog_ && event->type() == QEvent::Hide) || (watched == frameNumber_ && event->type() == QEvent::FocusIn)))
         playFramesButton_->setChecked(false);
     return QMainWindow::eventFilter(watched, event);
 }
@@ -346,7 +345,7 @@ void MainWindow::showNodeInfo(MeshId nodeId) {
 
 bool MainWindow::switchWorkspace(Workspace workspace) {
     if (workspace == Workspace::Postprocess) {
-        if (solving_ || !loadSavedResults())
+        if (meshOnlyPreview_ || solving_ || !loadSavedResults())
             return false;
     } else {
         playFramesButton_->setChecked(false);
@@ -365,13 +364,14 @@ bool MainWindow::switchWorkspace(Workspace workspace) {
 
 void MainWindow::updateActionStates() {
     const bool hasModel = modelGrid_.GetPointer() != nullptr && !workingDirectory_.isEmpty();
+    const bool hasFullModel = hasModel && !meshOnlyPreview_;
     const bool hasResultFile = !resultFilePath_.isEmpty() && QFileInfo(resultFilePath_).isFile();
     openAction_->setEnabled(!solving_);
-    solveAction_->setEnabled(hasModel && !solving_);
-    solveAction_->setToolTip(solving_ ? tr("正在计算并保存位移…") : tr("求解并保存位移 · F5"));
-    viewResultsAction_->setEnabled(hasModel && hasResultFile && !solving_);
+    solveAction_->setEnabled(hasFullModel && !solving_);
+    viewResultsAction_->setEnabled(hasFullModel && hasResultFile && !solving_);
     pickNodeAction_->setEnabled(hasModel);
     pickElementAction_->setEnabled(hasModel);
+    solveAction_->setToolTip(solving_ ? tr("正在计算并保存位移…") : tr("求解并保存位移 · F5"));
     viewResultsAction_->setChecked(workspace_ == Workspace::Postprocess && componentCombo_->currentIndex() >= 0 &&
                                    contourCheck_->isChecked());
 }
@@ -424,6 +424,16 @@ void MainWindow::onOpenFile() {
     if (solving_)
         return;
 
+    const QString fullModelLabel = tr("完整模型");
+    const QString meshOnlyLabel = tr("仅预览网格");
+    bool accepted = false;
+    const QString selectedMode = QInputDialog::getItem(this, tr("打开工作目录"), tr("读取模式"),
+                                                       QStringList{fullModelLabel, meshOnlyLabel}, 0, false, &accepted);
+    if (!accepted)
+        return;
+    const bool meshOnly = selectedMode == meshOnlyLabel;
+    const auto mode = meshOnly ? AbaqusReadMode::MeshOnly : AbaqusReadMode::FullModel;
+
     while (true) {
         const QString selected = QFileDialog::getExistingDirectory(this, tr("选择包含唯一 INP 文件的工作目录"), workingDirectory_);
         if (selected.isEmpty())
@@ -452,7 +462,7 @@ void MainWindow::onOpenFile() {
         }
 
         AbaqusInpReader reader;
-        auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()));
+        auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()), mode);
         for (const auto &warning : readResult.warnings)
             appendLog(QString::fromStdString(warning));
         if (!readResult.success()) {
@@ -474,7 +484,9 @@ void MainWindow::onOpenFile() {
         workingDirectory_ = directory.absolutePath();
         inputFilePath_ = inputPath;
         inputFingerprint_ = inputHash;
-        resultFilePath_ = directory.filePath(inputInfo.completeBaseName() + QStringLiteral(".displacement.csv"));
+        meshOnlyPreview_ = meshOnly;
+        resultFilePath_ =
+            meshOnlyPreview_ ? QString{} : directory.filePath(inputInfo.completeBaseName() + QStringLiteral(".displacement.csv"));
         currentModel_ = std::move(readResult.model);
         modelGrid_ = built.grid;
         resultGrid_ = nullptr;
@@ -489,7 +501,8 @@ void MainWindow::onOpenFile() {
         const bool hasResultFile = QFileInfo(resultFilePath_).isFile();
         switchWorkspace(Workspace::Preprocess);
         viewport_->setMesh(modelGrid_, true, true);
-        setWindowTitle(tr("CAEStudio — %1 — %2").arg(QString::fromLatin1(analysisKeyword(currentModel_.analysisType)), workingDirectory_));
+        setWindowTitle(
+            tr("CAEStudio — %1 — %2").arg(QString::fromLatin1(analysisKeyword(currentModel_.analysisType)), workingDirectory_));
         appendLog(tr("工作目录：%1").arg(workingDirectory_));
         appendLog(tr("已加载模型：%1").arg(inputFilePath_));
         if (hasResultFile)
@@ -579,7 +592,7 @@ bool MainWindow::showResultFrame(int index) {
 }
 
 void MainWindow::onSolve() {
-    if (solving_ || !modelGrid_ || resultFilePath_.isEmpty())
+    if (meshOnlyPreview_ || solving_ || !modelGrid_ || resultFilePath_.isEmpty())
         return;
     QString selectedMethod = tr("显式中心差分法");
     auto constraintMethod = LinearStaticConstraintMethod::Reduction;
@@ -640,8 +653,8 @@ void MainWindow::onSolve() {
         appendLog(tr("点击云图图标，读取结果并选择位移分量。"));
     });
 
-    watcher->setFuture(
-        QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
+    watcher->setFuture(QtConcurrent::run(
+        [model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, constraintMethod]() -> QString {
             try {
                 const AnalysisProblemBuilder builder(model);
                 QString saveError;
