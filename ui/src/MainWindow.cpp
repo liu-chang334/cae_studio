@@ -456,9 +456,18 @@ void MainWindow::updateResultDisplay() {
     }
     static const char *pointArrays[] = {"DisplacementMagnitude", "DisplacementX", "DisplacementY", "DisplacementZ"};
     static const char *pointTitles[] = {"Total\nDisplacement", "U1\nDisplacement", "U2\nDisplacement", "U3\nDisplacement"};
-    static const char *stressStrainTitles[] = {"E11\nStrain", "E22\nStrain", "E33\nStrain", "E12\nEng. shear strain",
-                                               "E13\nEng. shear strain", "E23\nEng. shear strain", "S11\nStress", "S22\nStress",
-                                               "S33\nStress", "S12\nStress", "S13\nStress", "S23\nStress"};
+    static const char *stressStrainTitles[] = {"E11\nStrain",
+                                               "E22\nStrain",
+                                               "E33\nStrain",
+                                               "E12\nEng. shear strain",
+                                               "E13\nEng. shear strain",
+                                               "E23\nEng. shear strain",
+                                               "S11\nStress",
+                                               "S22\nStress",
+                                               "S33\nStress",
+                                               "S12\nStress",
+                                               "S13\nStress",
+                                               "S23\nStress"};
     const int field = isStressOrStrain ? component - displacementComponentCount_ : component;
     const auto *array = isStressOrStrain ? vtkBuilder::nodalFieldNames[field] : pointArrays[field];
     const auto *title = isStressOrStrain ? stressStrainTitles[field] : pointTitles[field];
@@ -471,47 +480,48 @@ void MainWindow::updateResultDisplay() {
 
 void MainWindow::onOpenFile() {
     if (solving_)
-        return;
+        return;  // 防止求解中切换模型
 
     const QString fullModelLabel = tr("完整模型");
     const QString meshOnlyLabel = tr("仅预览网格");
     bool accepted = false;
-    const QString selectedMode = QInputDialog::getItem(this, tr("打开工作目录"), tr("读取模式"),
+    const QString selectedMode = QInputDialog::getItem(this, tr("打开工作目录"), tr("读取模式"),  // 通过下拉框选择读取模式
                                                        QStringList{fullModelLabel, meshOnlyLabel}, 0, false, &accepted);
     if (!accepted)
-        return;
+        return;  // 用户取消选择
     const bool meshOnly = selectedMode == meshOnlyLabel;
     const auto mode = meshOnly ? AbaqusReadMode::MeshOnly : AbaqusReadMode::FullModel;
 
     while (true) {
-        const QString selected = QFileDialog::getExistingDirectory(this, tr("选择包含唯一 INP 文件的工作目录"), workingDirectory_);
+        // 文件夹选择对话框, 返回选中的目录路径
+        const QString selected = QFileDialog::getExistingDirectory(this, tr("选择包含唯一inp文件的工作目录"), workingDirectory_);
         if (selected.isEmpty())
             return;
 
         const QDir directory(selected);
-        QFileInfoList inputFiles;
+        QFileInfoList inputFiles;  // 创建列表,保存找到的inp文件信息
         const auto files = directory.entryInfoList(QDir::Files | QDir::Hidden);
         for (const QFileInfo &file : files) {
             if (file.suffix().compare(QStringLiteral("inp"), Qt::CaseInsensitive) == 0)
-                inputFiles.append(file);
+                inputFiles.append(file);  // 添加到列表
         }
         if (inputFiles.size() != 1) {
             QMessageBox::warning(this, tr("工作目录无效"),
-                                 tr("工作目录中必须恰好包含一个 INP 文件。\n当前找到：%1 个。").arg(inputFiles.size()));
+                                 tr("工作目录中必须恰好包含一个inp文件.\n当前找到: %1 个.").arg(inputFiles.size()));
             continue;
         }
 
         const QFileInfo inputInfo = inputFiles.front();
-        const QString inputPath = inputInfo.absoluteFilePath();
+        const QString inputPath = inputInfo.absoluteFilePath();  // 取inp绝对路径
         QString error;
-        const QByteArray inputHash = DisplacementResultIO::fingerprint(inputPath, error);
+        const QByteArray inputHash = DisplacementResultIO::fingerprint(inputPath, error);  // 计算inp文件指纹
         if (inputHash.isEmpty()) {
             QMessageBox::warning(this, tr("读取失败"), error);
             continue;
         }
 
-        AbaqusInpReader reader;
-        auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()), mode);
+        AbaqusInpReader reader;  // 创建Abaqus inp文件读取器
+        auto readResult = reader.read(std::filesystem::path(inputPath.toStdWString()), mode);  // 读取inp文件
         for (const auto &warning : readResult.warnings)
             appendLog(QString::fromStdString(warning));
         if (!readResult.success()) {
@@ -520,7 +530,7 @@ void MainWindow::onOpenFile() {
         }
         const QByteArray hashAfterRead = DisplacementResultIO::fingerprint(inputPath, error);
         if (hashAfterRead.isEmpty() || hashAfterRead != inputHash) {
-            QMessageBox::warning(this, tr("模型读取失败"), tr("读取期间 INP 文件发生变化或无法访问，请重新选择。"));
+            QMessageBox::warning(this, tr("模型读取失败"), tr("读取期间inp文件发生变化或无法访问, 请重新选择."));
             continue;
         }
         const auto built = vtkBuilder{}.build(readResult.model.mesh);
@@ -529,33 +539,32 @@ void MainWindow::onOpenFile() {
             continue;
         }
 
-        // 验证成功后才替换当前模型；取消或失败不会丢失已打开的模型。
-        workingDirectory_ = directory.absolutePath();
-        inputFilePath_ = inputPath;
-        inputFingerprint_ = inputHash;
-        meshOnlyPreview_ = meshOnly;
+        // 验证成功后才替换当前模型 取消或失败不会丢失已打开的模型
+        workingDirectory_ = directory.absolutePath();  // 更新当前工作目录
+        inputFilePath_ = inputPath;  // 保存inp文件绝对路径
+        inputFingerprint_ = inputHash;  // 保存inp文件指纹
+        meshOnlyPreview_ = meshOnly;  // 记录是否处于仅预览网格模式
         resultFilePath_ =
             meshOnlyPreview_ ? QString{} : directory.filePath(inputInfo.completeBaseName() + QStringLiteral(".displacement.csv"));
-        currentModel_ = std::move(readResult.model);
-        modelGrid_ = built.grid;
-        resultGrid_ = nullptr;
+        currentModel_ = std::move(readResult.model);  // 保存读取到的模型数据
+        modelGrid_ = built.grid;  // 保存构建好的vtk网格数据
+        resultGrid_ = nullptr;  // 清除原先保存的结果网格数据
         {
-            const QSignalBlocker componentBlocker(componentCombo_);
-            const QSignalBlocker contourBlocker(contourCheck_);
-            const QSignalBlocker legendBlocker(legendCheck_);
-            componentCombo_->setCurrentIndex(-1);
-            contourCheck_->setChecked(true);
-            legendCheck_->setChecked(true);
-        }
+            const QSignalBlocker componentBlocker(componentCombo_);  // 屏蔽分量选择框信号
+            const QSignalBlocker contourBlocker(contourCheck_);  // 屏蔽云图开关信号
+            const QSignalBlocker legendBlocker(legendCheck_);  // 屏蔽图例开关信号
+            componentCombo_->setCurrentIndex(-1);  // -1表示没有选中项
+            contourCheck_->setChecked(true);  // 云图开关默认开
+            legendCheck_->setChecked(true);  // 图例开关默认开
+        }  // 局部作用域, 打开新模型时临时屏蔽控件信号, 重置控件后自动恢复
         const bool hasResultFile = QFileInfo(resultFilePath_).isFile();
         switchWorkspace(Workspace::Preprocess);
         viewport_->setMesh(modelGrid_, true, true);
-        setWindowTitle(
-            tr("CAEStudio — %1 — %2").arg(QString::fromLatin1(analysisKeyword(currentModel_.analysisType)), workingDirectory_));
-        appendLog(tr("工作目录：%1").arg(workingDirectory_));
-        appendLog(tr("已加载模型：%1").arg(inputFilePath_));
+        setWindowTitle(tr("CAEStudio — %1").arg(workingDirectory_));  // 更新窗口标题
+        appendLog(tr("工作目录: %1").arg(workingDirectory_));  // 更新日志
+        appendLog(tr("已加载模型: %1").arg(inputFilePath_));  // 更新日志
         if (hasResultFile)
-            appendLog(tr("发现结果文件：%1\n进入后处理时将检查并读取。").arg(resultFilePath_));
+            appendLog(tr("已有结果文件: %1\n进入后处理时将读取.").arg(resultFilePath_));
         return;
     }
 }
@@ -633,9 +642,9 @@ void MainWindow::updateResultComponents() {
         while (componentCombo_->count() > displacementComponentCount_)
             componentCombo_->removeItem(displacementComponentCount_);
     } else if (componentCombo_->count() == displacementComponentCount_) {
-        componentCombo_->addItems({tr("应变 E11"), tr("应变 E22"), tr("应变 E33"), tr("工程剪应变 E12"),
-                                   tr("工程剪应变 E13"), tr("工程剪应变 E23"), tr("应力 S11"), tr("应力 S22"),
-                                   tr("应力 S33"), tr("应力 S12"), tr("应力 S13"), tr("应力 S23")});
+        componentCombo_->addItems({tr("应变 E11"), tr("应变 E22"), tr("应变 E33"), tr("工程剪应变 E12"), tr("工程剪应变 E13"),
+                                   tr("工程剪应变 E23"), tr("应力 S11"), tr("应力 S22"), tr("应力 S33"), tr("应力 S12"),
+                                   tr("应力 S13"), tr("应力 S23")});
     }
     if (resultFrames_.size() > 1 && componentCombo_->currentIndex() < 0)
         componentCombo_->setCurrentIndex(0);
@@ -722,48 +731,47 @@ void MainWindow::onSolve() {
         appendLog(tr("点击云图图标查看节点位移、应变和应力。"));
     });
 
-    watcher->setFuture(QtConcurrent::run(
-        [model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, paths, constraintMethod]() -> SolveOutput {
-            bool displacementSaved = false;
-            try {
-                const AnalysisProblemBuilder builder(model);
-                QString saveError;
-                std::vector<DisplacementFrame> frames;
-                std::vector<ElasticResultFrame> elasticFrames;
-                const bool explicitDynamics = model.analysisType == AnalysisType::ExplicitDynamics;
-                if (explicitDynamics) {
-                    const auto problem = builder.buildExplicitDynamicsProblem();
-                    constexpr std::size_t outputIntervals = 120;
-                    auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
-                    frames = std::move(solution.frames);
-                    elasticFrames = std::move(solution.elasticFrames);
-                    displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
-                } else {
-                    const auto system = builder.buildLinearStaticSystem();
-                    LinearStaticSolver solver;
-                    const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
-                    frames.push_back({0.0, solution.displacements});
-                    if (solution.elasticFrame)
-                        elasticFrames.push_back(*solution.elasticFrame);
-                    displacementSaved = DisplacementResultIO::save(outputPath, model.mesh, frames.front().displacements,
-                                                                   inputHash, saveError);
-                }
-                if (!displacementSaved)
-                    return {saveError, {}};
-                if (elasticFrames.size() != frames.size() ||
-                    !std::equal(elasticFrames.begin(), elasticFrames.end(), frames.begin(),
-                                [](const ElasticResultFrame &elastic, const DisplacementFrame &displacement) {
-                                    return elastic.time == displacement.time;
-                                }))
-                    return {{}, tr("积分点输出帧与位移帧不匹配。")};
-                const auto displacementHash = DisplacementResultIO::fingerprint(outputPath, saveError);
-                if (displacementHash.isEmpty() ||
-                    !ElasticResultIO::save(paths, model.mesh, elasticFrames, displacementHash, saveError))
-                    return {{}, saveError};
-                return {};
-            } catch (const std::exception &error) {
-                const auto message = QString::fromUtf8(error.what());
-                return displacementSaved ? SolveOutput{{}, message} : SolveOutput{message, {}};
+    watcher->setFuture(QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, paths,
+                                          constraintMethod]() -> SolveOutput {
+        bool displacementSaved = false;
+        try {
+            const AnalysisProblemBuilder builder(model);
+            QString saveError;
+            std::vector<DisplacementFrame> frames;
+            std::vector<ElasticResultFrame> elasticFrames;
+            const bool explicitDynamics = model.analysisType == AnalysisType::ExplicitDynamics;
+            if (explicitDynamics) {
+                const auto problem = builder.buildExplicitDynamicsProblem();
+                constexpr std::size_t outputIntervals = 120;
+                auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
+                frames = std::move(solution.frames);
+                elasticFrames = std::move(solution.elasticFrames);
+                displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
+            } else {
+                const auto system = builder.buildLinearStaticSystem();
+                LinearStaticSolver solver;
+                const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
+                frames.push_back({0.0, solution.displacements});
+                if (solution.elasticFrame)
+                    elasticFrames.push_back(*solution.elasticFrame);
+                displacementSaved =
+                    DisplacementResultIO::save(outputPath, model.mesh, frames.front().displacements, inputHash, saveError);
             }
-        }));
+            if (!displacementSaved)
+                return {saveError, {}};
+            if (elasticFrames.size() != frames.size() ||
+                !std::equal(elasticFrames.begin(), elasticFrames.end(), frames.begin(),
+                            [](const ElasticResultFrame &elastic, const DisplacementFrame &displacement) {
+                                return elastic.time == displacement.time;
+                            }))
+                return {{}, tr("积分点输出帧与位移帧不匹配。")};
+            const auto displacementHash = DisplacementResultIO::fingerprint(outputPath, saveError);
+            if (displacementHash.isEmpty() || !ElasticResultIO::save(paths, model.mesh, elasticFrames, displacementHash, saveError))
+                return {{}, saveError};
+            return {};
+        } catch (const std::exception &error) {
+            const auto message = QString::fromUtf8(error.what());
+            return displacementSaved ? SolveOutput{{}, message} : SolveOutput{message, {}};
+        }
+    }));
 }

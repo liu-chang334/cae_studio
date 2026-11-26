@@ -35,13 +35,17 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
-    void onOpenFile();
-    void onSolve();
+    void onOpenFile();  // 打开模型文件
+    void onSolve();  // 求解
     void showResultOptions();
     void updateResultDisplay();
 
 private:
-    enum class Workspace { Preprocess, Solve, Postprocess };
+    enum class Workspace {
+        Preprocess,  // 前处理
+        Solve,  // 正在求解
+        Postprocess  // 后处理
+    };
     static constexpr int displacementComponentCount_ = 4;
 
     void setupLogWidget();
