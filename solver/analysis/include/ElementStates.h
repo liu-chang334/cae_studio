@@ -3,6 +3,10 @@
 #include "AnalysisElement.h"
 #include "ElasticResultFrame.h"
 
+/**
+ * @brief 单元状态管理类
+ * @details 管理一次求解过程中所有单元的积分点状态
+ */
 class ElementStates {
 public:
     ElementStates(const std::vector<AnalysisElement> &elements, std::size_t dofCount);
