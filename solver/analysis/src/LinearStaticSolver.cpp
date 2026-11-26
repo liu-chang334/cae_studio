@@ -40,8 +40,7 @@ linalg::VectorX solveSystem(const linalg::MatrixX &coefficientMatrix, const lina
     throw std::invalid_argument("Unsupported linear static algorithm");
 }
 
-linalg::VectorX solveByReduction(const RawLinearSystem &system, const ConstraintIndices &indices,
-                                 LinearStaticAlgorithm algorithm) {
+linalg::VectorX solveByReduction(const RawLinearSystem &system, const ConstraintIndices &indices, LinearStaticAlgorithm algorithm) {
     const auto &A = system.originalCoefficientMatrix;
     const auto &b = system.originalRhs;
     const auto &prescribed = system.prescribedValues;
@@ -66,8 +65,7 @@ linalg::VectorX solveByReduction(const RawLinearSystem &system, const Constraint
     return displacements;
 }
 
-linalg::VectorX solveByPenalty(const RawLinearSystem &system, const ConstraintIndices &indices,
-                               LinearStaticAlgorithm algorithm) {
+linalg::VectorX solveByPenalty(const RawLinearSystem &system, const ConstraintIndices &indices, LinearStaticAlgorithm algorithm) {
     const auto &A = system.originalCoefficientMatrix;  // 原始系数矩阵
     const auto &b = system.originalRhs;  // 原始右端项
     if (indices.prescribedIndices.empty())

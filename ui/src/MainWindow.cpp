@@ -668,27 +668,27 @@ bool MainWindow::showResultFrame(int index) {
 
 void MainWindow::onSolve() {
     if (meshOnlyPreview_ || solving_ || !modelGrid_ || resultFilePath_.isEmpty())
-        return;
+        return;  // 如果是网格预览模式/正在求解/vtk网格为空/没有设置结果文件路径, 则不求解直接返回
     QString selectedMethod = tr("显式中心差分法");
     auto constraintMethod = LinearStaticConstraintMethod::Reduction;
     if (currentModel_.analysisType == AnalysisType::Static) {
-        QDialog methodDialog(this);
+        QDialog methodDialog(this);  // 局部对话框
         methodDialog.setWindowTitle(tr("线性静力求解"));
         methodDialog.setMinimumWidth(300);
 
-        auto *methods = new QComboBox(&methodDialog);
+        auto *methods = new QComboBox(&methodDialog);  // 下拉框,用于选择边界条件处理方法
         methods->addItem(tr("约化法"), static_cast<int>(LinearStaticConstraintMethod::Reduction));
         methods->addItem(tr("乘大数法"), static_cast<int>(LinearStaticConstraintMethod::Penalty));
-        auto *form = new QFormLayout();
-        form->addRow(tr("位移约束处理方法"), methods);
+        auto *form = new QFormLayout();  // 创建表单布局
+        form->addRow(tr("边界条件处理方法"), methods);  // 向表单添加1行 标签+下拉选项
 
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &methodDialog);
-        connect(buttons, &QDialogButtonBox::accepted, &methodDialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &methodDialog, &QDialog::reject);
+        connect(buttons, &QDialogButtonBox::accepted, &methodDialog, &QDialog::accept);  // 点击确定->按钮组发出accepted信号
+        connect(buttons, &QDialogButtonBox::rejected, &methodDialog, &QDialog::reject);  // 点击取消->按钮组发出rejected信号
 
-        auto *layout = new QVBoxLayout(&methodDialog);
-        layout->addLayout(form);
-        layout->addWidget(buttons);
+        auto *layout = new QVBoxLayout(&methodDialog);  // 为对话框创建垂直布局
+        layout->addLayout(form);  // 先放表单
+        layout->addWidget(buttons);  // 再放确认取消按钮组
         methodDialog.adjustSize();
         if (methodDialog.exec() != QDialog::Accepted)
             return;
@@ -697,24 +697,24 @@ void MainWindow::onSolve() {
     }
 
     QString error;
-    const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);
+    const QByteArray currentHash = DisplacementResultIO::fingerprint(inputFilePath_, error);  // 计算文件指纹
     if (currentHash.isEmpty()) {
         QMessageBox::warning(this, tr("无法求解"), error);
         return;
     }
     if (currentHash != inputFingerprint_) {
-        QMessageBox::warning(this, tr("无法求解"), tr("INP 文件已被修改，请重新选择工作目录加载模型。"));
+        QMessageBox::warning(this, tr("无法求解"), tr("inp文件已被修改, 请重新选择工作目录加载模型."));
         return;
     }
 
     solving_ = true;
     switchWorkspace(Workspace::Solve);
     updateActionStates();
-    appendLog(tr("正在求解（%1）…").arg(selectedMethod));
+    appendLog(tr("正在求解(%1)...").arg(selectedMethod));
 
     const auto paths = ElasticResultPaths::forDisplacement(resultFilePath_);
-    auto *watcher = new QFutureWatcher<SolveOutput>(this);
-    connect(watcher, &QFutureWatcher<SolveOutput>::finished, this, [this, watcher, paths]() {
+    auto *watcher = new QFutureWatcher<SolveOutput>(this);  // 创建异步任务监视器, 监视后台任务状态
+    connect(watcher, &QFutureWatcher<SolveOutput>::finished, this, [this, watcher, paths]() {  // 注册求解完成后的行为
         const auto output = watcher->result();
         watcher->deleteLater();
         solving_ = false;
@@ -723,12 +723,11 @@ void MainWindow::onSolve() {
             appendLog(output.error);
             return;
         }
-        appendLog(tr("位移结果已保存：%1").arg(resultFilePath_));
+        appendLog(tr("位移场已保存: %1").arg(resultFilePath_));
         if (output.elasticError.isEmpty())
-            appendLog(tr("节点结果已保存：%1\n积分点结果已保存：%2").arg(paths.nodes, paths.integrationPoints));
+            appendLog(tr("节点结果已保存: %1\n积分点结果已保存: %2").arg(paths.nodes, paths.integrationPoints));
         else
-            appendLog(tr("应变应力 CSV 保存失败：%1").arg(output.elasticError));
-        appendLog(tr("点击云图图标查看节点位移、应变和应力。"));
+            appendLog(tr("应变应力csv保存失败: %1").arg(output.elasticError));
     });
 
     watcher->setFuture(QtConcurrent::run([model = currentModel_, outputPath = resultFilePath_, inputHash = inputFingerprint_, paths,
@@ -737,21 +736,21 @@ void MainWindow::onSolve() {
         try {
             const AnalysisProblemBuilder builder(model);
             QString saveError;
-            std::vector<DisplacementFrame> frames;
-            std::vector<ElasticResultFrame> elasticFrames;
+            std::vector<DisplacementFrame> frames;  // 位移场帧数组
+            std::vector<ElasticResultFrame> elasticFrames;  // 应变应力场帧数组
             const bool explicitDynamics = model.analysisType == AnalysisType::ExplicitDynamics;
-            if (explicitDynamics) {
+            if (explicitDynamics) {  // 显示动力分析
                 const auto problem = builder.buildExplicitDynamicsProblem();
                 constexpr std::size_t outputIntervals = 120;
                 auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
-                frames = std::move(solution.frames);
-                elasticFrames = std::move(solution.elasticFrames);
+                frames = std::move(solution.frames);  // 位移场帧移动到数组
+                elasticFrames = std::move(solution.elasticFrames);  // 应变应力场帧移动到数组
                 displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
-            } else {
+            } else {  // 线性静力分析
                 const auto system = builder.buildLinearStaticSystem();
                 LinearStaticSolver solver;
                 const auto &solution = solver.solve(system, LinearStaticAlgorithm::Cholesky, constraintMethod);
-                frames.push_back({0.0, solution.displacements});
+                frames.push_back({0.0, solution.displacements});  // 位移场帧添加到数组
                 if (solution.elasticFrame)
                     elasticFrames.push_back(*solution.elasticFrame);
                 displacementSaved =
@@ -764,7 +763,7 @@ void MainWindow::onSolve() {
                             [](const ElasticResultFrame &elastic, const DisplacementFrame &displacement) {
                                 return elastic.time == displacement.time;
                             }))
-                return {{}, tr("积分点输出帧与位移帧不匹配。")};
+                return {{}, tr("积分点输出帧与位移帧不匹配.")};
             const auto displacementHash = DisplacementResultIO::fingerprint(outputPath, saveError);
             if (displacementHash.isEmpty() || !ElasticResultIO::save(paths, model.mesh, elasticFrames, displacementHash, saveError))
                 return {{}, saveError};
