@@ -26,14 +26,15 @@ linalg::Matrix<6, 6> computeIsotropicElasticMatrix(const IsotropicElasticData &m
 
 void LinearElasticMaterial::integrate(const MaterialPointState &, const linalg::Vector<6> &totalStrain, double,
                                       MaterialPointState &trial) const {
-    StressStrainState fields{};
-    fields.strain = totalStrain;
+    StressStrainState fields{};  // 用于存放本构计算所得应力应变状态
+    fields.strain = totalStrain;  // 直接赋值总应变
     for (std::size_t row = 0; row < fields.stress.size(); ++row) {
         for (std::size_t col = 0; col < totalStrain.size(); ++col)
-            fields.stress[row] += elasticMatrix_[row][col] * totalStrain[col];
+            fields.stress[row] +=
+                elasticMatrix_[row][col] * totalStrain[col];  // TODO: 目前固定为弹性本构关系, 未来需要拓展到弹塑性增量格式
         if (!std::isfinite(fields.strain[row]) || !std::isfinite(fields.stress[row]))
             throw std::domain_error("Linear elastic integration produced a non-finite state");
     }
-    trial.fields = fields;
-    trial.internalVariables.clear();
+    trial.fields = fields;  // 更新当前积分点的试算应力应变状态
+    trial.internalVariables.clear();  // 弹性材料, 无需内变量
 }

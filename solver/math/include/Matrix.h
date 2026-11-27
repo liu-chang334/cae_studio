@@ -53,7 +53,7 @@ private:
 using VectorX = std::vector<double>;
 
 /**
- * @brief 静态矩阵乘法
+ * @brief 静态矩阵乘法, 编译期需确定矩阵维度
  * @param left 左矩阵
  * @param right 右矩阵
  * @return 矩阵乘法结果

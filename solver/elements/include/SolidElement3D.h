@@ -41,6 +41,11 @@ public:
      * @return 积分点数量
      */
     std::size_t integrationPointCount() const { return integrationPointCount_; }
+
+    /**
+     * @brief 创建单元状态
+     * @return 单元状态
+     */
     ElementState createState() const { return ElementState(integrationPointCount_); }
 
     virtual linalg::MatrixX computeElasticStiffness() const = 0;

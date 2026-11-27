@@ -9,10 +9,9 @@
 
 namespace {
 // 对应 C3D8 单元连接顺序的自然坐标。
-constexpr int nodeSigns[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
-                                 {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
+constexpr int nodeSigns[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}};
 const double gaussCoordinate = 1.0 / std::sqrt(3.0);
-}
+}  // namespace
 
 C3D8Element::C3D8Element(std::vector<MeshNode> nodes, std::shared_ptr<const Material3D> material)
     : SolidElement3D(std::move(nodes), std::move(material), 8) {
@@ -114,7 +113,7 @@ void C3D8Element::initializeGeometry() {
     nodalVolumes_.fill(0.0);
     linalg::Matrix<6, 24> averageBvol{};
     // 01. 保存B-Bvol, 累计Bvol的体积积分
-    for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
+    for (std::size_t gp = 0; gp < geometryCache_.size(); ++gp) {
         const auto &[r, s, t] = nodeSigns[gp];
         const linalg::Vector<3> natural{r * gaussCoordinate, s * gaussCoordinate, t * gaussCoordinate};
         const auto referenceGradients = computeShapeGradientsReference(natural);  // 对自然坐标偏导
@@ -126,7 +125,7 @@ void C3D8Element::initializeGeometry() {
         const auto globalGradients = computeShapeGradientsGlobal(referenceGradients, jacobian);  // 对物理坐标偏导
         const auto B = computeB(globalGradients);  // 组装应变矩阵B
         const auto Bvol = computeVolumetricB(B);  // 组装体积应变矩阵
-        auto &point = geometry_[gp];
+        auto &point = geometryCache_[gp];
         point.integrationFactor = detJ * weight;  // 体积积分因子
         volume_ += point.integrationFactor;  // 单元体积
         const auto shape = computeShapeFunctions(natural);
@@ -145,7 +144,7 @@ void C3D8Element::initializeGeometry() {
             value /= volume_;
     }
     // 04. 每个积分点加上单元平均体积项
-    for (auto &point : geometry_) {
+    for (auto &point : geometryCache_) {
         for (int row = 0; row < 6; ++row) {
             for (int col = 0; col < 24; ++col)
                 point.Bbar[row][col] += averageBvol[row][col];
@@ -154,17 +153,17 @@ void C3D8Element::initializeGeometry() {
 }
 
 linalg::MatrixX C3D8Element::computeElasticStiffness() const {
-    const auto n = dofCount();
-    linalg::MatrixX ke(n, n);
-    const auto D = material_->initialElasticMatrix();
-    for (const auto &point : geometry_) {
+    const auto n = dofCount();  // 获取自由度数量
+    linalg::MatrixX ke(n, n);  // 初始化单刚容器
+    const auto D = material_->initialElasticMatrix();  // TODO: 固定获取初始弹性刚度矩阵, 未来可以扩展到弹塑性
+    for (const auto &point : geometryCache_) {
         const auto &Bbar = point.Bbar;
         // (6×6) × (6×24) → 6×24
         const auto DB = linalg::multiply(D, Bbar);  // 6×24
         const auto pointStiffness = linalg::multiply(linalg::transpose(Bbar), DB);  // 24×24
         for (std::size_t row = 0; row < ke.rows(); ++row) {
             for (std::size_t col = 0; col < ke.cols(); ++col) {
-                ke(row, col) += pointStiffness[row][col] * point.integrationFactor;
+                ke(row, col) += pointStiffness[row][col] * point.integrationFactor;  // 高斯积分ke
             }
         }
     }
@@ -186,18 +185,18 @@ linalg::VectorX C3D8Element::computeLumpedMass() const {
 }
 
 void C3D8Element::updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const {
-    if (elementDisplacements.size() != dofCount() || state.committed.size() != geometry_.size() ||
-        state.trial.size() != geometry_.size())
+    if (elementDisplacements.size() != dofCount() || state.committed.size() != geometryCache_.size() ||
+        state.trial.size() != geometryCache_.size())
         throw std::invalid_argument("C3D8 requires 24 displacement components and 8 material points");
 
-    for (std::size_t gp = 0; gp < geometry_.size(); ++gp) {
-        const auto &Bbar = geometry_[gp].Bbar;
-        linalg::Vector<6> strain{};
+    for (std::size_t gp = 0; gp < geometryCache_.size(); ++gp) {
+        const auto &Bbar = geometryCache_[gp].Bbar;  // TODO: 目前固定取修正Bbar, 未来可扩展为用户可选的标准B或修正Bbar
+        linalg::Vector<6> strain{};  // 单积分点应变状态容器
         for (std::size_t row = 0; row < strain.size(); ++row) {
             for (std::size_t col = 0; col < elementDisplacements.size(); ++col)
-                strain[row] += Bbar[row][col] * elementDisplacements[col];
+                strain[row] += Bbar[row][col] * elementDisplacements[col];  // strain=B*displacement
         }
-        material_->integrate(state.committed[gp], strain, timeIncrement, state.trial[gp]);
+        material_->integrate(state.committed[gp], strain, timeIncrement, state.trial[gp]);  // 更新当前积分点试算材料状态
     }
 }
 
@@ -223,7 +222,8 @@ std::array<StressStrainState, 8> C3D8Element::extrapolateToNodes(const std::arra
             }
         }
         const auto finite = [](double value) { return std::isfinite(value); };
-        if (!std::all_of(state.strain.begin(), state.strain.end(), finite) || !std::all_of(state.stress.begin(), state.stress.end(), finite))
+        if (!std::all_of(state.strain.begin(), state.strain.end(), finite) ||
+            !std::all_of(state.stress.begin(), state.stress.end(), finite))
             throw std::domain_error("C3D8 extrapolated result contains a non-finite component");
     }
     return nodalStates;

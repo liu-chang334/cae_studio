@@ -60,12 +60,17 @@ private:
      */
     linalg::Matrix<8, 3> nodeCoordinates() const;
 
+    /**
+     * @brief 在自然坐标系下计算某点的形函数值
+     * @param naturalCoordinates 自然坐标
+     * @return 当前点处各形函数值构成的向量
+     */
     static linalg::Vector<8> computeShapeFunctions(const linalg::Vector<3> &naturalCoordinates);
 
     /**
-     * @brief 形函数对自然坐标的导数
+     * @brief 形函数对自然坐标的偏导数
      * @param naturalCoordinates 自然坐标
-     * @return 当前积分点处形函数对自然坐标的导数矩阵
+     * @return 当前点处形函数对自然坐标的偏导数矩阵
      * @details 静态方法, 可不实例化调用
      */
     static linalg::Matrix<3, 8> computeShapeGradientsReference(const linalg::Vector<3> &naturalCoordinates);
@@ -106,10 +111,10 @@ private:
     /**
      * @brief 初始化各积分点的Bbar, 积分因子和单元体积
      */
-    void initializeGeometry();
+    void initializeGeometry();  // TODO: 未来可添加入参,控制是否进行Bbar修正
 
 private:
-    std::array<IntegrationPointGeometryCache, 8> geometry_{};
+    std::array<IntegrationPointGeometryCache, 8> geometryCache_{};
     std::array<double, 8> nodalVolumes_{};  // 用于计算对各节点集中质量的贡献
     double volume_ = 0.0;
 };

@@ -4,7 +4,7 @@
 
 #include <optional>
 
-// 单元定义可以在求解之间共享, 积分点状态由每次求解单独持有
+/// @brief 封装单元算法,全局自由度索引,源id, 供求解器使用
 struct AnalysisElement {
     std::shared_ptr<const SolidElement3D> element;  // 该单元对应的算法类型
     std::vector<std::size_t> globalDofs;  // 该单元对应的全局自由度索引

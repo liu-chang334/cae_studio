@@ -19,6 +19,8 @@ public:
     double youngModulus() const { return data_.youngModulus; }
     double poissonRatio() const { return data_.poissonRatio; }
     const linalg::Matrix<6, 6> &initialElasticMatrix() const override { return elasticMatrix_; }
+
+    /// @brief 全量形式弹性本构关系, 更新当前积分点的试算应力应变状态
     void integrate(const MaterialPointState &, const linalg::Vector<6> &totalStrain, double, MaterialPointState &trial) const override;
 
 private:

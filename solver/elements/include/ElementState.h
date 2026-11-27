@@ -20,7 +20,7 @@ using IntegrationPointState = StressStrainState;
 
 /// @brief 单积分点材料状态
 struct MaterialPointState {
-    IntegrationPointState fields;
+    IntegrationPointState fields;  // 应力应变状态
     std::vector<double> internalVariables;  // 与材料本构模型相关的内变量
 };
 

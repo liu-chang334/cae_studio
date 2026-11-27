@@ -93,19 +93,21 @@ linalg::VectorX solveByPenalty(const RawLinearSystem &system, const ConstraintIn
 
 const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &system, LinearStaticAlgorithm algorithm,
                                                     LinearStaticConstraintMethod constraintMethod) {
+    // 01. 求解线性方程
     result_.reset();
     const auto indices = collectConstraintIndices(system);
     linalg::VectorX displacements;
     switch (constraintMethod) {
-    case LinearStaticConstraintMethod::Reduction:
+    case LinearStaticConstraintMethod::Reduction:  // 约化法
         displacements = solveByReduction(system, indices, algorithm);
         break;
-    case LinearStaticConstraintMethod::Penalty:
+    case LinearStaticConstraintMethod::Penalty:  // 罚函数法
         displacements = solveByPenalty(system, indices, algorithm);
         break;
     default:
         throw std::invalid_argument("Unsupported linear static constraint method");
     }
+    // 02. 计算反应力
     const auto &A = system.originalCoefficientMatrix;
     const auto &b = system.originalRhs;
     LinearStaticResult result{std::move(displacements), linalg::VectorX(b.size(), 0.0)};
@@ -115,11 +117,14 @@ const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &syste
             reaction += A(row, col) * result.displacements[col];
         result.reactions[row] = reaction;
     }
-    ElementStates states(system.elementDefinitions, b.size());
+    // 03. 更新材料状态
+    ElementStates states(
+        system.elementDefinitions,
+        b.size());  // TODO: 目前ElementStates是局部的, 如果扩展到历史依赖的材料, 是否需要让一个全局对象持有ElementStates
     if (!states.empty()) {
-        states.updateTrial(result.displacements, 0.0);
-        states.commit();
-        result.elasticFrame = states.snapshot(0.0);
+        states.updateTrial(result.displacements, 0.0);  // 更新试算单元状态
+        states.commit();  // 提交单元状态
+        result.elasticFrame = states.snapshot(0.0);  // 保存弹性框架, 对于弹性全量求解, 无需时间步
     }
     result_ = std::move(result);
     return *result_;
