@@ -671,7 +671,11 @@ void MainWindow::onSolve() {
         return;  // 如果是网格预览模式/正在求解/vtk网格为空/没有设置结果文件路径, 则不求解直接返回
     QString selectedMethod = tr("显式中心差分法");
     auto constraintMethod = LinearStaticConstraintMethod::Reduction;
-    if (currentModel_.analysisType == AnalysisType::Static) {
+    const bool nonlinearStatic = currentModel_.analysisType == AnalysisType::Static &&
+        std::any_of(currentModel_.materials.begin(), currentModel_.materials.end(),
+                    [](const MaterialData &material) { return material.plasticity.has_value(); });
+    if (nonlinearStatic) selectedMethod = tr("增量非线性静力 · Newton · 约化法");
+    if (currentModel_.analysisType == AnalysisType::Static && !nonlinearStatic) {
         QDialog methodDialog(this);  // 局部对话框
         methodDialog.setWindowTitle(tr("线性静力求解"));
         methodDialog.setMinimumWidth(300);
@@ -745,6 +749,14 @@ void MainWindow::onSolve() {
                 auto solution = ExplicitDynamicsSolver{}.solve(problem, model.explicitDynamicsStep.value(), outputIntervals);
                 frames = std::move(solution.frames);  // 位移场帧移动到数组
                 elasticFrames = std::move(solution.elasticFrames);  // 应变应力场帧移动到数组
+                displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
+            } else if (std::any_of(model.materials.begin(), model.materials.end(),
+                                   [](const MaterialData &material) { return material.plasticity.has_value(); })) {
+                const auto problem = builder.buildNonlinearStaticProblem();
+                AnalysisContext context(problem);
+                auto solution = NonlinearStaticSolver{}.solve(context, problem.loads, problem.prescribedDisplacements);
+                frames = std::move(solution.frames);
+                elasticFrames = std::move(solution.materialFrames);
                 displacementSaved = DisplacementResultIO::saveHistory(outputPath, model.mesh, frames, inputHash, saveError);
             } else {  // 线性静力分析
                 const auto system = builder.buildLinearStaticSystem();

@@ -1,5 +1,5 @@
 #include "ExplicitDynamicsSolver.h"
-#include "ElementStates.h"
+#include "ElementStatesManager.h"
 #include "FEModel.h"
 
 #include <algorithm>
@@ -78,7 +78,7 @@ double evaluateSmoothStep(const SmoothStepAmplitude &amplitude, double time) {
     if (time >= amplitude.back().time)
         return amplitude.back().value;
     const auto right = std::upper_bound(amplitude.begin(), amplitude.end(), time,
-                                       [](double time, const AmplitudePoint &point) { return time < point.time; });
+                                        [](double time, const AmplitudePoint &point) { return time < point.time; });
     const auto &left = *(right - 1);
     const double fraction = (time - left.time) / (right->time - left.time);
     const double weight = fraction * fraction * fraction * (10.0 + fraction * (-15.0 + 6.0 * fraction));
@@ -87,8 +87,8 @@ double evaluateSmoothStep(const SmoothStepAmplitude &amplitude, double time) {
 
 }  // namespace
 
-ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProblem &problem,
-                                                     const ExplicitDynamicsStep &step, std::size_t outputIntervals) const {
+ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProblem &problem, const ExplicitDynamicsStep &step,
+                                                     std::size_t outputIntervals) const {
     if (!std::isfinite(step.duration) || step.duration <= 0.0 ||
         (step.timeIncrement && (!std::isfinite(*step.timeIncrement) || *step.timeIncrement <= 0.0)))
         throw std::invalid_argument("Explicit step duration and time increment must be finite and positive");
@@ -116,7 +116,8 @@ ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProbl
     const double increment = std::min(step.duration, step.timeIncrement.value_or(0.9 * stabilityLimit));
     if (increment >= stabilityLimit) {
         std::ostringstream message;
-        message << "Requested time increment " << increment << " must be below the conservative explicit stability limit " << stabilityLimit;
+        message << "Requested time increment " << increment << " must be below the conservative explicit stability limit "
+                << stabilityLimit;
         throw std::invalid_argument(message.str());
     }
 
@@ -140,7 +141,7 @@ ExplicitDynamicsResult ExplicitDynamicsSolver::solve(const ExplicitDynamicsProbl
         }
     };
 
-    ElementStates states(problem.elementDefinitions, size);
+    ElementStatesManager states(problem.elementDefinitions, size);
     double stateTime = 0.0;
     const auto recordMaterialState = [&] {
         if (states.empty())

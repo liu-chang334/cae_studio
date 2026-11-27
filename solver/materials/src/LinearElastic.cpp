@@ -36,5 +36,6 @@ void LinearElasticMaterial::integrate(const MaterialPointState &, const linalg::
             throw std::domain_error("Linear elastic integration produced a non-finite state");
     }
     trial.fields = fields;  // 更新当前积分点的试算应力应变状态
+    trial.tangent = elasticMatrix_;
     trial.internalVariables.clear();  // 弹性材料, 无需内变量
 }

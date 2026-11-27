@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Matrix.h"
 #include <array>
 #include <vector>
 
@@ -22,6 +23,7 @@ using IntegrationPointState = StressStrainState;
 struct MaterialPointState {
     IntegrationPointState fields;  // 应力应变状态
     std::vector<double> internalVariables;  // 与材料本构模型相关的内变量
+    linalg::Matrix<6, 6> tangent{};  // 当前试算状态的算法一致切线(弹塑性矩阵), 工程剪应变约定
 };
 
 /// @brief 单个单元内所有积分点的材料状态
@@ -34,7 +36,9 @@ struct ElementState {
     void revert() { trial = committed; }
 
     /// @brief 已提交状态数组
+    /// @details 默认初始化为0
     std::vector<MaterialPointState> committed;
     /// @brief 试算状态数组
+    /// @details 默认初始化为0
     std::vector<MaterialPointState> trial;
 };

@@ -35,7 +35,13 @@ public:
      */
     linalg::VectorX computeLumpedMass() const override;
 
+    /// @brief 更新单元的试算状态
+    /// @param elementDisplacements 单元节点位移(全量), 维度为24x1
+    /// @param timeIncrement 时间增量
+    /// @param state 当前单元状态
     void updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const override;
+
+    void computeTrialResponse(const ElementState &state, linalg::VectorX &internalForces, linalg::MatrixX &tangent) const override;
 
     /**
      * @brief 用 C3D8 的三线性形函数将 2×2×2 高斯点状态外推到 8 个节点

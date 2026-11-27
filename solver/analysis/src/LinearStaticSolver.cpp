@@ -1,5 +1,5 @@
 #include "LinearStaticSolver.h"
-#include "ElementStates.h"
+#include "ElementStatesManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,10 +118,8 @@ const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &syste
         result.reactions[row] = reaction;
     }
     // 03. 更新材料状态
-    ElementStates states(system.elementDefinitions,
-                         b.size());  // TODO: 当前线弹性全量求解使用局部状态即可
-    // 扩展增量非线性、多分析步或续算时，由分析上下文持有并传入状态，
-    // 保留 committed 历史，并保证单元定义的生命周期覆盖状态使用期。
+    // 线弹性全量求解无材料历史；增量材料非线性由 AnalysisContext 持有持续状态。
+    ElementStatesManager states(system.elementDefinitions, b.size());
     if (!states.empty()) {
         states.updateTrial(result.displacements, 0.0);  // 更新试算单元状态
         states.commit();  // 提交单元状态

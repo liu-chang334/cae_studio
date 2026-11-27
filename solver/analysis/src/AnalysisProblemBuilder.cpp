@@ -2,6 +2,7 @@
 #include "C3D8Element.h"
 #include "FEModel.h"
 #include "LinearElastic.h"
+#include "MisesPlasticity.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -71,7 +72,11 @@ std::shared_ptr<const Material3D> resolveMaterial(MeshId elementId, const FEMode
     if (model.analysisType == AnalysisType::ExplicitDynamics && data.plasticity)
         throw std::invalid_argument(label + " requires a linear elastic material for explicit dynamics: " + name);
     // 创建新材料实例
-    std::shared_ptr<const Material3D> material = std::make_shared<const LinearElasticMaterial>(*data.elastic, data.density);
+    std::shared_ptr<const Material3D> material;
+    if (data.plasticity)
+        material = std::make_shared<const MisesPlasticityMaterial>(*data.elastic, *data.plasticity, data.density);
+    else
+        material = std::make_shared<const LinearElasticMaterial>(*data.elastic, data.density);
     materialCache.emplace(name, material);
     return material;
 }
@@ -87,6 +92,7 @@ AnalysisProblemBuilder::AnalysisProblemBuilder(const FEModel &model) : analysisT
     // 02. 构建材料名->材料地址映射表
     std::unordered_map<std::string, const MaterialData *> materialsByName;
     for (const auto &data : model.materials) {
+        hasPlasticity_ = hasPlasticity_ || data.plasticity.has_value();
         if (!materialsByName.emplace(data.name, &data).second)  // 检查材料名是否重复
             throw std::invalid_argument("Duplicate material name: " + data.name);
     }
@@ -208,10 +214,18 @@ linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness(const std::vect
 }
 
 RawLinearSystem AnalysisProblemBuilder::buildLinearStaticSystem() const {
+    if (hasPlasticity_)
+        throw std::invalid_argument("Plastic materials require incremental nonlinear static analysis");
     if (analysisType_ != AnalysisType::Static)
         throw std::invalid_argument("Linear static assembly requires a static analysis step");
     auto elements = analysisElements();
     return {assembleElasticStiffness(elements), forceVector_, prescribedDisplacements_, std::move(elements)};
+}
+
+NonlinearStaticProblem AnalysisProblemBuilder::buildNonlinearStaticProblem() const {
+    if (analysisType_ != AnalysisType::Static || elements_.empty())
+        throw std::invalid_argument("Nonlinear static analysis requires a static step and elements");
+    return {analysisElements(), forceVector_, prescribedDisplacements_};
 }
 
 ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() const {

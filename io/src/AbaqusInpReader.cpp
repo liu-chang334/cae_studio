@@ -16,6 +16,7 @@ enum Section {
     ConcentratedLoad,  // *CLOAD，以节点编号或节点集名称指定集中载荷目标
     Boundary,  // *BOUNDARY约束数据
     Elastic,  // *ELASTIC弹性模量和泊松比
+    Plastic,  // *PLASTIC塑性材料
     Density,  // *DENSITY材料密度
     ExplicitTime,  // *DYNAMIC, EXPLICIT总时间和可选固定时间步长
     SmoothAmplitude,  // SMOOTH STEP幅值的时间和值对
@@ -324,6 +325,13 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
                     return result;
                 }
                 section = Section::Elastic;
+            } else if (keyword == "*PLASTIC") {
+                if (model.materials.empty() || fields.size() != 1 || model.materials.back().plasticity) {
+                    result.error = lineMessage(lineNumber, "*PLASTIC仅支持默认各向同性硬化,且每种材料只定义一次");
+                    return result;
+                }
+                model.materials.back().plasticity = MisesPlasticityData{};
+                section = Section::Plastic;
             } else if (keyword == "*DENSITY") {
                 if (model.materials.empty() || fields.size() != 1) {
                     result.error = lineMessage(lineNumber, "*DENSITY 需要所属的 *MATERIAL，且仅支持常量密度");
@@ -414,6 +422,21 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
                 return result;
             }
             model.materials.back().elastic = elastic;
+        } else if (section == Section::Plastic) {
+            while (!parts.empty() && parts.back().empty())
+                parts.pop_back();
+            PlasticHardeningPoint point;
+            auto &curve = model.materials.back().plasticity->hardeningCurve;
+            if (parts.size() != 2 || !parseDouble(parts[0], point.yieldStress) ||
+                !parseDouble(parts[1], point.equivalentPlasticStrain) || point.yieldStress <= 0.0 ||
+                (curve.empty() ? point.equivalentPlasticStrain != 0.0
+                               : point.equivalentPlasticStrain <= curve.back().equivalentPlasticStrain ||
+                                     point.yieldStress < curve.back().yieldStress)) {
+                result.error = lineMessage(
+                    lineNumber, "*PLASTIC需要屈服应力和等效塑性应变; 首点塑性应变为零, 随后严格递增, 暂不支持应力存在软化段");
+                return result;
+            }
+            curve.push_back(point);
         } else if (section == Section::Density) {
             while (!parts.empty() && parts.back().empty())
                 parts.pop_back();
@@ -503,7 +526,7 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
         if (!load.amplitudeName.empty()) {
             const auto amplitude = model.smoothStepAmplitudes.find(load.amplitudeName);
             if (amplitude == model.smoothStepAmplitudes.end() || amplitude->second.empty()) {
-                result.error = "*CLOAD 引用的 SMOOTH STEP 幅值不存在、缺少数据或定义类型不受支持：" + load.amplitudeName;
+                result.error = "*CLOAD引用的SMOOTH STEP幅值不存在, 缺少数据或定义类型不受支持: " + load.amplitudeName;
                 return result;
             }
         }
@@ -514,8 +537,12 @@ AbaqusReadResult AbaqusInpReader::read(const std::filesystem::path &path, Abaqus
     }
     std::unordered_map<std::string, std::string> materialNames;
     for (const MaterialData &material : model.materials) {
+        if (material.plasticity && material.plasticity->hardeningCurve.empty()) {
+            result.error = "塑性材料缺少硬化曲线: " + material.name;
+            return result;
+        }
         if (!materialNames.emplace(toUpperAscii(material.name), material.name).second) {
-            result.error = "材料名称重复：" + material.name;
+            result.error = "材料名称重复: " + material.name;
             return result;
         }
     }

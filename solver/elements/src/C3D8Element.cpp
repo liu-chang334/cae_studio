@@ -170,6 +170,25 @@ linalg::MatrixX C3D8Element::computeElasticStiffness() const {
     return ke;
 }
 
+void C3D8Element::computeTrialResponse(const ElementState &state, linalg::VectorX &force, linalg::MatrixX &tangent) const {
+    if (state.trial.size() != geometryCache_.size())
+        throw std::invalid_argument("C3D8 nonlinear response requires 8 material points");
+    force.assign(dofCount(), 0.0);
+    tangent = linalg::MatrixX(dofCount(), dofCount());
+    for (std::size_t gp = 0; gp < geometryCache_.size(); ++gp) {
+        const auto &geometry = geometryCache_[gp];
+        const auto &point = state.trial[gp];
+        const auto Bt = linalg::transpose(geometry.Bbar);
+        const auto stiffness = linalg::multiply(Bt, linalg::multiply(point.tangent, geometry.Bbar));
+        for (std::size_t i = 0; i < dofCount(); ++i) {
+            for (std::size_t c = 0; c < 6; ++c)
+                force[i] += Bt[i][c] * point.fields.stress[c] * geometry.integrationFactor;
+            for (std::size_t j = 0; j < dofCount(); ++j)
+                tangent(i, j) += stiffness[i][j] * geometry.integrationFactor;
+        }
+    }
+}
+
 linalg::VectorX C3D8Element::computeLumpedMass() const {
     const auto density = material_->density();
     if (!density || !std::isfinite(*density) || *density <= 0.0)
@@ -194,7 +213,7 @@ void C3D8Element::updateTrialState(const linalg::VectorX &elementDisplacements, 
         linalg::Vector<6> strain{};  // 单积分点应变状态容器
         for (std::size_t row = 0; row < strain.size(); ++row) {
             for (std::size_t col = 0; col < elementDisplacements.size(); ++col)
-                strain[row] += Bbar[row][col] * elementDisplacements[col];  // strain=B*displacement
+                strain[row] += Bbar[row][col] * elementDisplacements[col];  // strain=B*displacement(全量)
         }
         material_->integrate(state.committed[gp], strain, timeIncrement, state.trial[gp]);  // 更新当前积分点试算材料状态
     }

@@ -2,6 +2,7 @@
 
 #include "ExplicitDynamicsProblem.h"
 #include "Matrix.h"
+#include "NonlinearStaticSolver.h"
 #include "RawLinearSystem.h"
 #include "SolidElement3D.h"
 
@@ -20,7 +21,9 @@ class AnalysisProblemBuilder {
 public:
     explicit AnalysisProblemBuilder(const FEModel &model);
 
+    /// @brief 全量格式线弹性静力
     RawLinearSystem buildLinearStaticSystem() const;
+    NonlinearStaticProblem buildNonlinearStaticProblem() const;
     ExplicitDynamicsProblem buildExplicitDynamicsProblem() const;
 
     /**
@@ -125,4 +128,5 @@ private:
      */
     std::vector<std::optional<double>> prescribedDisplacements_;
     AnalysisType analysisType_;
+    bool hasPlasticity_ = false;
 };

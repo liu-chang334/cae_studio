@@ -49,6 +49,9 @@ public:
     ElementState createState() const { return ElementState(integrationPointCount_); }
 
     virtual linalg::MatrixX computeElasticStiffness() const = 0;
+    virtual void computeTrialResponse(const ElementState &, linalg::VectorX &, linalg::MatrixX &) const {
+        throw std::invalid_argument("Element does not support nonlinear response");
+    }
     virtual void updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const = 0;
     virtual std::vector<StressStrainState> extrapolateNodalStates(const std::vector<IntegrationPointState> &points) const = 0;
     virtual linalg::VectorX computeLumpedMass() const { throw std::invalid_argument("Element does not support lumped mass"); }
