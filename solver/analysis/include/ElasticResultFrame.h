@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IntegrationPointState.h"
+#include "ElementState.h"
 
 using NodalStressStrainValues = std::array<double, 12>;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IntegrationPointState.h"
+#include "ElementState.h"
 #include "Matrix.h"
 #include "MeshData.h"
 
@@ -46,9 +46,7 @@ public:
     virtual linalg::MatrixX computeElasticStiffness() const = 0;
     virtual void updateTrialState(const linalg::VectorX &elementDisplacements, double timeIncrement, ElementState &state) const = 0;
     virtual std::vector<StressStrainState> extrapolateNodalStates(const std::vector<IntegrationPointState> &points) const = 0;
-    virtual linalg::VectorX computeLumpedMass() const {
-        throw std::invalid_argument("Element does not support lumped mass");
-    }
+    virtual linalg::VectorX computeLumpedMass() const { throw std::invalid_argument("Element does not support lumped mass"); }
 
 protected:
     /**
