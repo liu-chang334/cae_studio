@@ -9,8 +9,7 @@
 #include <unordered_set>
 
 namespace {
-template <typename Apply>
-void forEachTargetNode(const FEModel &model, const NodeTarget &target, Apply apply) {
+template <typename Apply> void forEachTargetNode(const FEModel &model, const NodeTarget &target, Apply apply) {
     if (const auto *nodeId = std::get_if<MeshId>(&target)) {
         apply(*nodeId);
         return;
@@ -196,7 +195,7 @@ std::vector<AnalysisElement> AnalysisProblemBuilder::analysisElements() const {
 
 linalg::MatrixX AnalysisProblemBuilder::assembleElasticStiffness(const std::vector<AnalysisElement> &elements) const {
     const auto n = globalDofCount();
-    linalg::MatrixX K(n, n);
+    linalg::MatrixX K(n, n);  // TODO: 目前使用稠密矩阵, 后续可以考虑使用稀疏矩阵
     for (const auto &entry : elements) {
         const auto &dofs = entry.globalDofs;
         const auto ke = entry.element->computeElasticStiffness();
@@ -221,8 +220,8 @@ ExplicitDynamicsProblem AnalysisProblemBuilder::buildExplicitDynamicsProblem() c
     if (elements_.empty())
         throw std::invalid_argument("Explicit dynamics requires at least one element");
 
-    ExplicitDynamicsProblem problem{linalg::VectorX(globalDofCount(), 0.0), forceVector_, prescribedDisplacements_, {},
-                                    timeDependentLoads_, analysisElements()};
+    ExplicitDynamicsProblem problem{
+        linalg::VectorX(globalDofCount(), 0.0), forceVector_, prescribedDisplacements_, {}, timeDependentLoads_, analysisElements()};
     problem.elements.reserve(elements_.size());
     for (const auto &entry : problem.elementDefinitions) {
         const auto &element = *entry.element;

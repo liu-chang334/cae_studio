@@ -4,8 +4,8 @@
 #include "ElasticResultFrame.h"
 
 /**
- * @brief 单元状态管理类
- * @details 管理一次求解过程中所有单元的积分点状态
+ * @brief 单元状态与算法管理类
+ * @details 管理一次求解过程中所有单元的积分点状态, 并持有单元算法的引用, 方便更新试算状态
  */
 class ElementStates {
 public:

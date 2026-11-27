@@ -118,9 +118,10 @@ const LinearStaticResult &LinearStaticSolver::solve(const RawLinearSystem &syste
         result.reactions[row] = reaction;
     }
     // 03. 更新材料状态
-    ElementStates states(
-        system.elementDefinitions,
-        b.size());  // TODO: 目前ElementStates是局部的, 如果扩展到历史依赖的材料, 是否需要让一个全局对象持有ElementStates
+    ElementStates states(system.elementDefinitions,
+                         b.size());  // TODO: 当前线弹性全量求解使用局部状态即可
+    // 扩展增量非线性、多分析步或续算时，由分析上下文持有并传入状态，
+    // 保留 committed 历史，并保证单元定义的生命周期覆盖状态使用期。
     if (!states.empty()) {
         states.updateTrial(result.displacements, 0.0);  // 更新试算单元状态
         states.commit();  // 提交单元状态
